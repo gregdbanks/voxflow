@@ -1,5 +1,6 @@
 import type {
   IActiveWindow,
+  ICleanupService,
   IDictionaryRepository,
   ITranscriptionService,
 } from '../../platform/interfaces.js';
@@ -7,7 +8,13 @@ import { AudioRecorder, type RecordingResult } from '../audio/AudioRecorder.js';
 import { TranscriptionError } from '../transcription/TranscriptionService.js';
 import type { TextInjector } from '../injection/TextInjector.js';
 
-export type PipelineState = 'idle' | 'recording' | 'transcribing' | 'injecting' | 'error';
+export type PipelineState =
+  | 'idle'
+  | 'recording'
+  | 'transcribing'
+  | 'cleaning'
+  | 'injecting'
+  | 'error';
 
 export interface PipelineEvent {
   state: PipelineState;
@@ -23,6 +30,10 @@ export interface DictationPipelineOptions {
   injector?: TextInjector;
   /** Optional — used to stamp each event with the focused app at record time. */
   activeWindow?: IActiveWindow;
+  /** Optional — LLM cleanup applied before dictionary. */
+  cleanup?: ICleanupService;
+  /** Optional — gate for whether to run the cleanup step (e.g. from settings). */
+  isCleanupEnabled?: () => boolean;
   /** Optional — personal dictionary applied to the transcription before injection. */
   dictionary?: IDictionaryRepository;
   onEvent?: (event: PipelineEvent) => void;
@@ -34,6 +45,8 @@ export class DictationPipeline {
   private readonly transcription: ITranscriptionService;
   private readonly injector: TextInjector | undefined;
   private readonly activeWindow: IActiveWindow | undefined;
+  private readonly cleanup: ICleanupService | undefined;
+  private readonly isCleanupEnabled: () => boolean;
   private readonly dictionary: IDictionaryRepository | undefined;
   private readonly onEvent: (event: PipelineEvent) => void;
   private readonly language: string | undefined;
@@ -45,6 +58,8 @@ export class DictationPipeline {
     this.transcription = opts.transcription;
     this.injector = opts.injector;
     this.activeWindow = opts.activeWindow;
+    this.cleanup = opts.cleanup;
+    this.isCleanupEnabled = opts.isCleanupEnabled ?? (() => true);
     this.dictionary = opts.dictionary;
     this.onEvent = opts.onEvent ?? (() => undefined);
     this.language = opts.language;
@@ -63,7 +78,7 @@ export class DictationPipeline {
       await this.finish();
       return;
     }
-    // transcribing / injecting: ignore repeat presses
+    // transcribing / cleaning / injecting: ignore repeat presses
   }
 
   async begin(): Promise<void> {
@@ -101,6 +116,16 @@ export class DictationPipeline {
     } catch (err) {
       this.setState('error', { error: err as Error });
       throw err;
+    }
+
+    if (this.cleanup && text.length > 0 && this.isCleanupEnabled()) {
+      this.setState('cleaning', { text, activeApp: this.focusedApp });
+      try {
+        text = await this.cleanup.clean({ text, activeApp: this.focusedApp });
+      } catch (err) {
+        // Cleanup is best-effort; fall back to the raw transcription on error.
+        this.onEvent({ state: 'cleaning', text, activeApp: this.focusedApp, error: err as Error });
+      }
     }
 
     if (this.dictionary && text.length > 0) {

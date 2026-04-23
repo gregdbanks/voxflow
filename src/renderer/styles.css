@@ -55,6 +55,9 @@ body {
 .dot[data-state='injecting'] {
   background: #0a84ff;
 }
+.dot[data-state='cleaning'] {
+  background: #af52de;
+}
 .dot[data-state='idle'] {
   background: #34c759;
 }
@@ -110,6 +113,49 @@ kbd {
   margin: 0 0 4px;
   font-size: 13px;
   font-weight: 600;
+}
+
+.settings-section {
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(120, 120, 128, 0.16);
+}
+
+.settings-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.settings-subheading {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.65;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.toggle-title {
+  font-weight: 500;
+}
+
+.toggle-hint {
+  opacity: 0.6;
+  font-size: 11px;
 }
 
 .settings-hint {

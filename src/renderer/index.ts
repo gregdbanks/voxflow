@@ -48,6 +48,7 @@ window.voxflow?.onStateChange((state) => {
       idle: 'Press ⌘⇧Space to dictate',
       recording: 'Listening…',
       transcribing: 'Transcribing…',
+      cleaning: 'Cleaning up…',
       injecting: 'Pasting…',
       error: 'Error — see logs',
     };
@@ -84,6 +85,7 @@ if (settingsMount) {
   mountSettingsPanel({
     container: settingsMount,
     dictionary: window.voxflow?.dictionary,
+    settings: window.voxflow?.settings,
   });
 }
 

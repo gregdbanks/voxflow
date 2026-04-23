@@ -27,10 +27,12 @@
     "rebuild:node": "npm rebuild better-sqlite3"
   },
   "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.1036.0",
     "@paymoapp/active-window": "^2.1.4",
     "better-sqlite3": "^12.9.0",
     "clipboardy": "^5.3.1",
     "electron-squirrel-startup": "^1.0.1",
+    "fastest-levenshtein": "^1.0.16",
     "menubar": "^9.5.1",
     "msw": "^2.13.5",
     "node-mic": "^1.0.1",

@@ -9,6 +9,7 @@ import { createHotkey } from './hotkey.js';
 import { AudioRecorder } from '../services/audio/AudioRecorder.js';
 import { MacMicrophone } from '../platform/MacMicrophone.js';
 import { GroqTranscriptionService } from '../services/transcription/TranscriptionService.js';
+import { TextCleanupService } from '../services/llm/TextCleanupService.js';
 import {
   DictationPipeline,
   type PipelineEvent,
@@ -58,6 +59,7 @@ const STATE_TO_TRAY: Record<PipelineState, TrayState> = {
   idle: 'idle',
   recording: 'recording',
   transcribing: 'transcribing',
+  cleaning: 'cleaning',
   injecting: 'injecting',
   error: 'error',
 };
@@ -161,11 +163,25 @@ app.whenReady().then(() => {
       broadcast(mb, 'voxflow:error', ev.error.message);
     }
   };
+  let cleanup: TextCleanupService | undefined;
+  if (config.awsAccessKeyId && config.awsSecretAccessKey) {
+    cleanup = new TextCleanupService({
+      region: config.awsRegion,
+      accessKeyId: config.awsAccessKeyId,
+      secretAccessKey: config.awsSecretAccessKey,
+    });
+    logger.info('Bedrock cleanup service enabled');
+  } else {
+    logger.info('AWS credentials not set — skipping Bedrock cleanup');
+  }
+
   const pipeline = new DictationPipeline({
     recorder,
     transcription,
     injector,
     activeWindow,
+    cleanup,
+    isCleanupEnabled: () => settings?.get().cleanupEnabled ?? true,
     dictionary,
     onEvent: (ev) => {
       if (ev.state === 'idle' && ev.text && ev.text.length > 0 && corrections) {
