@@ -8,7 +8,15 @@ export default defineConfig({
       fileName: () => 'main.js',
     },
     rollupOptions: {
-      external: ['electron', 'menubar', 'node-mic', 'better-sqlite3', 'clipboardy', '@paymoapp/active-window'],
+      external: [
+        'electron',
+        'menubar',
+        'node-mic',
+        'better-sqlite3',
+        'clipboardy',
+        '@paymoapp/active-window',
+        'openai',
+      ],
     },
   },
 });

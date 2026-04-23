@@ -1,4 +1,10 @@
-import type { IMicrophone } from '../../src/platform/interfaces.js';
+import type {
+  ActiveWindowInfo,
+  IActiveWindow,
+  IClipboard,
+  IKeystroke,
+  IMicrophone,
+} from '../../src/platform/interfaces.js';
 
 export interface StubMicrophoneOptions {
   fixture: Buffer;
@@ -36,6 +42,54 @@ export class StubMicrophone implements IMicrophone {
     if (this.opts.stopDelayMs) await new Promise((r) => setTimeout(r, this.opts.stopDelayMs));
     this.recording = false;
     return this.opts.fixture;
+  }
+}
+
+export class StubClipboard implements IClipboard {
+  public contents: string;
+  public readCalls = 0;
+  public writes: string[] = [];
+  public failNextWrite: Error | null = null;
+
+  constructor(initial = '') {
+    this.contents = initial;
+  }
+
+  async read(): Promise<string> {
+    this.readCalls += 1;
+    return this.contents;
+  }
+
+  async write(text: string): Promise<void> {
+    if (this.failNextWrite) {
+      const err = this.failNextWrite;
+      this.failNextWrite = null;
+      throw err;
+    }
+    this.writes.push(text);
+    this.contents = text;
+  }
+}
+
+export class StubKeystroke implements IKeystroke {
+  public pasteCalls = 0;
+
+  async sendPaste(): Promise<void> {
+    this.pasteCalls += 1;
+  }
+}
+
+export class StubActiveWindow implements IActiveWindow {
+  public calls = 0;
+  public response: ActiveWindowInfo | null;
+
+  constructor(response: ActiveWindowInfo | null = null) {
+    this.response = response;
+  }
+
+  async getActive(): Promise<ActiveWindowInfo | null> {
+    this.calls += 1;
+    return this.response;
   }
 }
 
