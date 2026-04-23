@@ -1,7 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import { DictationPipeline } from '../../../../src/services/pipeline/DictationPipeline.js';
 import { AudioRecorder } from '../../../../src/services/audio/AudioRecorder.js';
-import { StubMicrophone } from '../../../helpers/platform-stubs.js';
+import { TextInjector } from '../../../../src/services/injection/TextInjector.js';
+import {
+  StubActiveWindow,
+  StubClipboard,
+  StubKeystroke,
+  StubMicrophone,
+} from '../../../helpers/platform-stubs.js';
 import type {
   ITranscriptionService,
   TranscriptionRequest,
@@ -87,6 +93,70 @@ describe('DictationPipeline', () => {
     const text = await pipeline.finish();
     expect(text).toBe('second try');
     expect(pipeline.getState()).toBe('idle');
+  });
+
+  it('injects text and records the active app when an injector is provided', async () => {
+    const pcm = Buffer.alloc(16000 * 2);
+    const mic = new StubMicrophone({ fixture: pcm });
+    const recorder = new AudioRecorder(mic);
+    const transcription: ITranscriptionService = {
+      transcribe: async () => ({ text: 'hello there', durationMs: 1 }),
+    };
+    const clipboard = new StubClipboard('original');
+    const keystroke = new StubKeystroke();
+    const injector = new TextInjector({
+      clipboard,
+      keystroke,
+      pasteDelayMs: 0,
+      restoreDelayMs: 0,
+    });
+    const activeWindow = new StubActiveWindow({ appName: 'TextEdit', title: 'Untitled' });
+    const events: Array<{ state: string; text?: string; app?: string }> = [];
+    const pipeline = new DictationPipeline({
+      recorder,
+      transcription,
+      injector,
+      activeWindow,
+      onEvent: (ev) => events.push({ state: ev.state, text: ev.text, app: ev.activeApp }),
+    });
+
+    await pipeline.toggle();
+    expect(events[0]).toMatchObject({ state: 'recording', app: 'TextEdit' });
+
+    await pipeline.finish();
+    expect(events.map((e) => e.state)).toEqual(['recording', 'transcribing', 'injecting', 'idle']);
+    expect(keystroke.pasteCalls).toBe(1);
+    expect(clipboard.writes).toEqual(['hello there', 'original']);
+    expect(events.at(-1)).toMatchObject({ state: 'idle', text: 'hello there', app: 'TextEdit' });
+  });
+
+  it('skips the injection step when the transcription is empty', async () => {
+    const pcm = Buffer.alloc(16000 * 2);
+    const mic = new StubMicrophone({ fixture: pcm });
+    const recorder = new AudioRecorder(mic);
+    const transcription: ITranscriptionService = {
+      transcribe: async () => ({ text: '', durationMs: 1 }),
+    };
+    const clipboard = new StubClipboard('keep me');
+    const keystroke = new StubKeystroke();
+    const injector = new TextInjector({
+      clipboard,
+      keystroke,
+      pasteDelayMs: 0,
+      restoreDelayMs: 0,
+    });
+    const events: string[] = [];
+    const pipeline = new DictationPipeline({
+      recorder,
+      transcription,
+      injector,
+      onEvent: (ev) => events.push(ev.state),
+    });
+    await pipeline.toggle();
+    await pipeline.finish();
+    expect(events).toEqual(['recording', 'transcribing', 'idle']);
+    expect(keystroke.pasteCalls).toBe(0);
+    expect(clipboard.writes).toEqual([]);
   });
 
   it('ignores repeat toggles while transcribing', async () => {

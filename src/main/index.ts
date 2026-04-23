@@ -15,6 +15,10 @@ import {
   type PipelineState,
 } from '../services/pipeline/DictationPipeline.js';
 import type { ITranscriptionService } from '../platform/interfaces.js';
+import { TextInjector } from '../services/injection/TextInjector.js';
+import { MacClipboard } from '../platform/MacClipboard.js';
+import { MacKeystroke } from '../platform/MacKeystroke.js';
+import { MacActiveWindowDetector } from '../services/injection/ActiveWindowDetector.js';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
 if (require('electron-squirrel-startup')) {
@@ -50,6 +54,7 @@ const STATE_TO_TRAY: Record<PipelineState, TrayState> = {
   idle: 'idle',
   recording: 'recording',
   transcribing: 'transcribing',
+  injecting: 'injecting',
   error: 'error',
 };
 
@@ -94,20 +99,34 @@ app.whenReady().then(() => {
   const microphone = new MacMicrophone();
   const recorder = new AudioRecorder(microphone);
   const transcription = createTranscriptionService(config.groqApiKey, logger);
+  const injector = new TextInjector({
+    clipboard: new MacClipboard(),
+    keystroke: new MacKeystroke(),
+  });
+  const activeWindow = new MacActiveWindowDetector();
+
   const onPipelineEvent = (ev: PipelineEvent): void => {
     const trayState = STATE_TO_TRAY[ev.state];
     trayController.setState(trayState);
     broadcast(mb, 'voxflow:state', ev.state);
     if (ev.text !== undefined) {
       broadcast(mb, 'voxflow:transcription', ev.text);
-      logger.info(`Transcription (${ev.text.length} chars)`);
+      if (ev.state === 'idle') {
+        logger.info(`Transcription injected (${ev.text.length} chars, app=${ev.activeApp ?? 'unknown'})`);
+      }
     }
     if (ev.error) {
       logger.error('Pipeline error', ev.error);
       broadcast(mb, 'voxflow:error', ev.error.message);
     }
   };
-  const pipeline = new DictationPipeline({ recorder, transcription, onEvent: onPipelineEvent });
+  const pipeline = new DictationPipeline({
+    recorder,
+    transcription,
+    injector,
+    activeWindow,
+    onEvent: onPipelineEvent,
+  });
 
   const hotkey = createHotkey({
     accelerator: config.hotkey,

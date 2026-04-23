@@ -1,7 +1,7 @@
 import { Menu, Tray, app, nativeImage } from 'electron';
 import path from 'node:path';
 
-export type TrayState = 'idle' | 'recording' | 'transcribing' | 'error';
+export type TrayState = 'idle' | 'recording' | 'transcribing' | 'injecting' | 'error';
 
 export interface TrayController {
   setState(state: TrayState): void;

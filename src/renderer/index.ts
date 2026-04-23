@@ -20,6 +20,7 @@ window.voxflow?.onStateChange((state) => {
       idle: 'Press ⌘⇧Space to dictate',
       recording: 'Listening…',
       transcribing: 'Transcribing…',
+      injecting: 'Pasting…',
       error: 'Error — see logs',
     };
     statusEl.textContent = labels[state] ?? state;

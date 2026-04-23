@@ -17,9 +17,12 @@
     "screenshots:m1": "tsx scripts/capture-m1-screenshots.ts",
     "screenshots:m2": "tsx scripts/capture-m2-screenshots.ts",
     "screenshots:m3": "tsx scripts/capture-m3-screenshots.ts",
+    "screenshots:m4": "tsx scripts/capture-m4-screenshots.ts",
     "test:integration": "VOXFLOW_INTEGRATION=1 vitest run test/integration"
   },
   "dependencies": {
+    "@paymoapp/active-window": "^2.1.4",
+    "clipboardy": "^5.3.1",
     "electron-squirrel-startup": "^1.0.1",
     "menubar": "^9.5.1",
     "msw": "^2.13.5",

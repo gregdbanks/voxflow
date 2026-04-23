@@ -52,6 +52,9 @@ body {
 .dot[data-state='transcribing'] {
   background: #ff9500;
 }
+.dot[data-state='injecting'] {
+  background: #0a84ff;
+}
 .dot[data-state='idle'] {
   background: #34c759;
 }
