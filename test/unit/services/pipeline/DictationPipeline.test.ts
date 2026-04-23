@@ -11,6 +11,7 @@ import {
   StubMicrophone,
 } from '../../../helpers/platform-stubs.js';
 import type {
+  ICleanupService,
   ITranscriptionService,
   TranscriptionRequest,
   TranscriptionResult,
@@ -159,6 +160,109 @@ describe('DictationPipeline', () => {
     expect(events).toEqual(['recording', 'transcribing', 'idle']);
     expect(keystroke.pasteCalls).toBe(0);
     expect(clipboard.writes).toEqual([]);
+  });
+
+  it('walks idle → recording → transcribing → cleaning → injecting → idle when cleanup is enabled', async () => {
+    const pcm = Buffer.alloc(16000 * 2);
+    const mic = new StubMicrophone({ fixture: pcm });
+    const recorder = new AudioRecorder(mic);
+    const transcription: ITranscriptionService = {
+      transcribe: async () => ({ text: 'um hello how are you', durationMs: 1 }),
+    };
+    const cleanup: ICleanupService = {
+      clean: async ({ text }) => text.replace(/^um /, '').replace('how are you', 'how are you?'),
+    };
+    const clipboard = new StubClipboard('');
+    const keystroke = new StubKeystroke();
+    const injector = new TextInjector({ clipboard, keystroke, pasteDelayMs: 0, restoreDelayMs: 0 });
+    const events: string[] = [];
+    const pipeline = new DictationPipeline({
+      recorder,
+      transcription,
+      cleanup,
+      injector,
+      onEvent: (ev) => events.push(ev.state),
+    });
+    await pipeline.toggle();
+    const text = await pipeline.finish();
+    expect(text).toBe('hello how are you?');
+    expect(events).toEqual(['recording', 'transcribing', 'cleaning', 'injecting', 'idle']);
+    expect(clipboard.writes[0]).toBe('hello how are you?');
+  });
+
+  it('falls back to raw text when cleanup throws', async () => {
+    const pcm = Buffer.alloc(16000 * 2);
+    const mic = new StubMicrophone({ fixture: pcm });
+    const recorder = new AudioRecorder(mic);
+    const transcription: ITranscriptionService = {
+      transcribe: async () => ({ text: 'raw text', durationMs: 1 }),
+    };
+    const cleanup: ICleanupService = {
+      clean: async () => {
+        throw new Error('bedrock down');
+      },
+    };
+    const pipeline = new DictationPipeline({ recorder, transcription, cleanup });
+    await pipeline.toggle();
+    const text = await pipeline.finish();
+    expect(text).toBe('raw text');
+  });
+
+  it('skips cleanup when isCleanupEnabled returns false', async () => {
+    const pcm = Buffer.alloc(16000 * 2);
+    const mic = new StubMicrophone({ fixture: pcm });
+    const recorder = new AudioRecorder(mic);
+    const transcription: ITranscriptionService = {
+      transcribe: async () => ({ text: 'um should not clean', durationMs: 1 }),
+    };
+    let cleanCalls = 0;
+    const cleanup: ICleanupService = {
+      clean: async ({ text }) => {
+        cleanCalls += 1;
+        return text.replace('um ', '');
+      },
+    };
+    const events: string[] = [];
+    const pipeline = new DictationPipeline({
+      recorder,
+      transcription,
+      cleanup,
+      isCleanupEnabled: () => false,
+      onEvent: (ev) => events.push(ev.state),
+    });
+    await pipeline.toggle();
+    const text = await pipeline.finish();
+    expect(text).toBe('um should not clean');
+    expect(cleanCalls).toBe(0);
+    expect(events).not.toContain('cleaning');
+  });
+
+  it('runs cleanup BEFORE dictionary so dictionary entries have the final word', async () => {
+    const pcm = Buffer.alloc(16000 * 2);
+    const mic = new StubMicrophone({ fixture: pcm });
+    const recorder = new AudioRecorder(mic);
+    const transcription: ITranscriptionService = {
+      transcribe: async () => ({ text: 'um the voxflow api', durationMs: 1 }),
+    };
+    const cleanup: ICleanupService = {
+      clean: async ({ text }) => text.replace('um ', ''), // removes filler
+    };
+    const db = new Database({ filename: ':memory:' });
+    db.migrate();
+    const dict = new DictionaryRepository(db);
+    dict.add('voxflow', 'VoxFlow', false);
+    dict.add('api', 'API', false);
+
+    const pipeline = new DictationPipeline({
+      recorder,
+      transcription,
+      cleanup,
+      dictionary: dict,
+    });
+    await pipeline.toggle();
+    const text = await pipeline.finish();
+    expect(text).toBe('the VoxFlow API');
+    db.close();
   });
 
   it('applies the personal dictionary to the transcription before injection', async () => {
