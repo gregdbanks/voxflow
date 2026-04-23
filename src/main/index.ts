@@ -1,10 +1,13 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, globalShortcut } from 'electron';
 import { menubar } from 'menubar';
 import path from 'node:path';
 import url from 'node:url';
 import { loadConfig } from '../shared/config.js';
-import { createLogger } from '../shared/logger.js';
-import { createTray, defaultTrayIconPath } from './tray.js';
+import { createLogger, type Logger } from '../shared/logger.js';
+import { createTray, defaultTrayIconPath, type TrayController, type TrayState } from './tray.js';
+import { createHotkey } from './hotkey.js';
+import { AudioRecorder } from '../services/audio/AudioRecorder.js';
+import { MacMicrophone } from '../platform/MacMicrophone.js';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
 if (require('electron-squirrel-startup')) {
@@ -27,6 +30,47 @@ function resolveIndexHtml(): string {
   const name = typeof MAIN_WINDOW_VITE_NAME !== 'undefined' ? MAIN_WINDOW_VITE_NAME : 'main_window';
   const filePath = path.join(__dirname, `../renderer/${name}/index.html`);
   return url.pathToFileURL(filePath).toString();
+}
+
+function broadcastState(mb: { window?: BrowserWindow | null }, state: TrayState): void {
+  const win = mb.window;
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('voxflow:state', state);
+  }
+}
+
+function updateState(
+  trayController: TrayController,
+  mb: { window?: BrowserWindow | null },
+  state: TrayState,
+): void {
+  trayController.setState(state);
+  broadcastState(mb, state);
+}
+
+async function handleHotkeyToggle(
+  recorder: AudioRecorder,
+  trayController: TrayController,
+  mb: { window?: BrowserWindow | null },
+  logger: Logger,
+): Promise<void> {
+  try {
+    if (!recorder.isRecording()) {
+      updateState(trayController, mb, 'recording');
+      await recorder.start();
+      logger.info('Recording started');
+      return;
+    }
+
+    const result = await recorder.stop();
+    logger.info(
+      `Recording stopped — pcm=${result.pcm.length}B wav=${result.wav.length}B duration=${result.durationMs}ms`,
+    );
+    updateState(trayController, mb, 'idle');
+  } catch (err) {
+    logger.error('Hotkey toggle failed', err);
+    updateState(trayController, mb, 'error');
+  }
 }
 
 app.whenReady().then(() => {
@@ -54,8 +98,25 @@ app.whenReady().then(() => {
     },
   });
 
+  const microphone = new MacMicrophone();
+  const recorder = new AudioRecorder(microphone);
+  const hotkey = createHotkey({
+    accelerator: config.hotkey,
+    onTrigger: () => {
+      void handleHotkeyToggle(recorder, trayController, mb, logger);
+    },
+    shortcut: globalShortcut,
+  });
+
   mb.on('ready', () => {
     logger.info('Menubar ready');
+    const ok = hotkey.register();
+    if (!ok) {
+      logger.warn(`Failed to register hotkey ${config.hotkey}`);
+    } else {
+      logger.info(`Hotkey registered: ${config.hotkey}`);
+    }
+    updateState(trayController, mb, 'idle');
   });
 
   mb.on('after-create-window', () => {
@@ -67,6 +128,7 @@ app.whenReady().then(() => {
   });
 
   app.on('before-quit', () => {
+    hotkey.unregister();
     trayController.destroy();
   });
 });
