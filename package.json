@@ -1,0 +1,49 @@
+{
+  "name": "voxflow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "macOS voice dictation menubar app",
+  "main": ".vite/build/main.js",
+  "scripts": {
+    "start": "electron-forge start",
+    "package": "electron-forge package",
+    "make": "electron-forge make",
+    "lint": "eslint . --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "screenshots:m1": "tsx scripts/capture-m1-screenshots.ts"
+  },
+  "dependencies": {
+    "electron-squirrel-startup": "^1.0.1",
+    "menubar": "^9.5.1"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "^7.5.0",
+    "@electron-forge/maker-deb": "^7.5.0",
+    "@electron-forge/maker-rpm": "^7.5.0",
+    "@electron-forge/maker-squirrel": "^7.5.0",
+    "@electron-forge/maker-zip": "^7.5.0",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.5.0",
+    "@electron-forge/plugin-fuses": "^7.5.0",
+    "@electron-forge/plugin-vite": "^7.5.0",
+    "@electron/fuses": "^1.8.0",
+    "@playwright/test": "^1.49.0",
+    "@types/node": "^22.10.0",
+    "@typescript-eslint/eslint-plugin": "^8.16.0",
+    "@typescript-eslint/parser": "^8.16.0",
+    "@vitest/coverage-v8": "^2.1.8",
+    "electron": "^33.2.0",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.31.0",
+    "playwright": "^1.49.0",
+    "prettier": "^3.4.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8"
+  }
+}
