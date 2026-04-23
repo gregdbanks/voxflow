@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    />
+    <title>VoxFlow</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="panel">
+      <header class="panel-header">
+        <span class="dot" data-state="idle"></span>
+        <h1>VoxFlow</h1>
+      </header>
+      <section class="panel-body">
+        <p id="status">Press <kbd>⌘⇧Space</kbd> to dictate</p>
+        <pre id="transcription" aria-live="polite"></pre>
+      </section>
+    </main>
+    <script type="module" src="./index.ts"></script>
+  </body>
+</html>
