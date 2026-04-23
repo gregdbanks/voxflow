@@ -4,10 +4,17 @@ import path from 'node:path';
 import url from 'node:url';
 import { loadConfig } from '../shared/config.js';
 import { createLogger, type Logger } from '../shared/logger.js';
-import { createTray, defaultTrayIconPath, type TrayController, type TrayState } from './tray.js';
+import { createTray, defaultTrayIconPath, type TrayState } from './tray.js';
 import { createHotkey } from './hotkey.js';
 import { AudioRecorder } from '../services/audio/AudioRecorder.js';
 import { MacMicrophone } from '../platform/MacMicrophone.js';
+import { GroqTranscriptionService } from '../services/transcription/TranscriptionService.js';
+import {
+  DictationPipeline,
+  type PipelineEvent,
+  type PipelineState,
+} from '../services/pipeline/DictationPipeline.js';
+import type { ITranscriptionService } from '../platform/interfaces.js';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
 if (require('electron-squirrel-startup')) {
@@ -32,45 +39,31 @@ function resolveIndexHtml(): string {
   return url.pathToFileURL(filePath).toString();
 }
 
-function broadcastState(mb: { window?: BrowserWindow | null }, state: TrayState): void {
+function broadcast(mb: { window?: BrowserWindow | null }, channel: string, payload: unknown): void {
   const win = mb.window;
   if (win && !win.isDestroyed()) {
-    win.webContents.send('voxflow:state', state);
+    win.webContents.send(channel, payload);
   }
 }
 
-function updateState(
-  trayController: TrayController,
-  mb: { window?: BrowserWindow | null },
-  state: TrayState,
-): void {
-  trayController.setState(state);
-  broadcastState(mb, state);
-}
+const STATE_TO_TRAY: Record<PipelineState, TrayState> = {
+  idle: 'idle',
+  recording: 'recording',
+  transcribing: 'transcribing',
+  error: 'error',
+};
 
-async function handleHotkeyToggle(
-  recorder: AudioRecorder,
-  trayController: TrayController,
-  mb: { window?: BrowserWindow | null },
+function createTranscriptionService(
+  apiKey: string | undefined,
   logger: Logger,
-): Promise<void> {
-  try {
-    if (!recorder.isRecording()) {
-      updateState(trayController, mb, 'recording');
-      await recorder.start();
-      logger.info('Recording started');
-      return;
-    }
-
-    const result = await recorder.stop();
-    logger.info(
-      `Recording stopped — pcm=${result.pcm.length}B wav=${result.wav.length}B duration=${result.durationMs}ms`,
-    );
-    updateState(trayController, mb, 'idle');
-  } catch (err) {
-    logger.error('Hotkey toggle failed', err);
-    updateState(trayController, mb, 'error');
-  }
+): ITranscriptionService {
+  if (apiKey) return new GroqTranscriptionService({ apiKey });
+  logger.warn('GROQ_API_KEY not set — using a no-op transcription service');
+  return {
+    async transcribe() {
+      return { text: '(no transcription — set GROQ_API_KEY)', durationMs: 0 };
+    },
+  };
 }
 
 app.whenReady().then(() => {
@@ -100,10 +93,26 @@ app.whenReady().then(() => {
 
   const microphone = new MacMicrophone();
   const recorder = new AudioRecorder(microphone);
+  const transcription = createTranscriptionService(config.groqApiKey, logger);
+  const onPipelineEvent = (ev: PipelineEvent): void => {
+    const trayState = STATE_TO_TRAY[ev.state];
+    trayController.setState(trayState);
+    broadcast(mb, 'voxflow:state', ev.state);
+    if (ev.text !== undefined) {
+      broadcast(mb, 'voxflow:transcription', ev.text);
+      logger.info(`Transcription (${ev.text.length} chars)`);
+    }
+    if (ev.error) {
+      logger.error('Pipeline error', ev.error);
+      broadcast(mb, 'voxflow:error', ev.error.message);
+    }
+  };
+  const pipeline = new DictationPipeline({ recorder, transcription, onEvent: onPipelineEvent });
+
   const hotkey = createHotkey({
     accelerator: config.hotkey,
     onTrigger: () => {
-      void handleHotkeyToggle(recorder, trayController, mb, logger);
+      pipeline.toggle().catch((err) => logger.error('Pipeline toggle failed', err));
     },
     shortcut: globalShortcut,
   });
@@ -116,7 +125,7 @@ app.whenReady().then(() => {
     } else {
       logger.info(`Hotkey registered: ${config.hotkey}`);
     }
-    updateState(trayController, mb, 'idle');
+    onPipelineEvent({ state: 'idle' });
   });
 
   mb.on('after-create-window', () => {
