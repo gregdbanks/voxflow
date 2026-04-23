@@ -83,3 +83,142 @@ kbd {
   max-height: 220px;
   overflow-y: auto;
 }
+
+.tabs {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+
+.tab {
+  appearance: none;
+  border: none;
+  background: rgba(120, 120, 128, 0.12);
+  color: inherit;
+  padding: 3px 8px;
+  font-size: 11px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.tab[aria-selected='true'] {
+  background: #0a84ff;
+  color: white;
+}
+
+.settings-heading {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-hint {
+  margin: 0 0 10px;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.dict-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.dict-form-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dict-form input[type='text'] {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  font-size: 12px;
+  border: 1px solid rgba(120, 120, 128, 0.28);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+}
+
+.dict-case {
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0.85;
+}
+
+.dict-add {
+  align-self: flex-start;
+  appearance: none;
+  border: none;
+  background: #0a84ff;
+  color: white;
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.dict-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.dict-entry {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  padding: 4px 8px;
+  background: rgba(120, 120, 128, 0.08);
+  border-radius: 6px;
+}
+
+.dict-pattern,
+.dict-replacement {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+.dict-arrow {
+  opacity: 0.5;
+}
+
+.dict-flag {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(10, 132, 255, 0.22);
+  color: #0a84ff;
+}
+
+.dict-remove {
+  margin-left: auto;
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+  opacity: 0.5;
+}
+
+.dict-remove:hover {
+  opacity: 1;
+  color: #ff3b30;
+}
+
+.dict-empty,
+.dict-unavailable {
+  font-size: 11px;
+  opacity: 0.6;
+  margin: 8px 0 0;
+}

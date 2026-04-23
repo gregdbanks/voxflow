@@ -1,4 +1,8 @@
-import type { IActiveWindow, ITranscriptionService } from '../../platform/interfaces.js';
+import type {
+  IActiveWindow,
+  IDictionaryRepository,
+  ITranscriptionService,
+} from '../../platform/interfaces.js';
 import { AudioRecorder, type RecordingResult } from '../audio/AudioRecorder.js';
 import { TranscriptionError } from '../transcription/TranscriptionService.js';
 import type { TextInjector } from '../injection/TextInjector.js';
@@ -19,6 +23,8 @@ export interface DictationPipelineOptions {
   injector?: TextInjector;
   /** Optional — used to stamp each event with the focused app at record time. */
   activeWindow?: IActiveWindow;
+  /** Optional — personal dictionary applied to the transcription before injection. */
+  dictionary?: IDictionaryRepository;
   onEvent?: (event: PipelineEvent) => void;
   language?: string;
 }
@@ -28,6 +34,7 @@ export class DictationPipeline {
   private readonly transcription: ITranscriptionService;
   private readonly injector: TextInjector | undefined;
   private readonly activeWindow: IActiveWindow | undefined;
+  private readonly dictionary: IDictionaryRepository | undefined;
   private readonly onEvent: (event: PipelineEvent) => void;
   private readonly language: string | undefined;
   private state: PipelineState = 'idle';
@@ -38,6 +45,7 @@ export class DictationPipeline {
     this.transcription = opts.transcription;
     this.injector = opts.injector;
     this.activeWindow = opts.activeWindow;
+    this.dictionary = opts.dictionary;
     this.onEvent = opts.onEvent ?? (() => undefined);
     this.language = opts.language;
   }
@@ -93,6 +101,10 @@ export class DictationPipeline {
     } catch (err) {
       this.setState('error', { error: err as Error });
       throw err;
+    }
+
+    if (this.dictionary && text.length > 0) {
+      text = this.dictionary.applyTo(text);
     }
 
     if (this.injector && text.length > 0) {

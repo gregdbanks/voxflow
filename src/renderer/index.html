@@ -14,10 +14,21 @@
       <header class="panel-header">
         <span class="dot" data-state="idle"></span>
         <h1>VoxFlow</h1>
+        <nav class="tabs" role="tablist">
+          <button type="button" class="tab" data-tab="dictate" aria-selected="true">Dictate</button>
+          <button type="button" class="tab" data-tab="settings" aria-selected="false">Settings</button>
+        </nav>
       </header>
-      <section class="panel-body">
+      <section class="panel-body" data-view="dictate">
         <p id="status">Press <kbd>⌘⇧Space</kbd> to dictate</p>
         <pre id="transcription" aria-live="polite"></pre>
+      </section>
+      <section class="panel-body" data-view="settings" hidden>
+        <h2 class="settings-heading">Personal Dictionary</h2>
+        <p class="settings-hint">
+          Replacements are applied to every transcription before it's pasted.
+        </p>
+        <div id="settings-dictionary"></div>
       </section>
     </main>
     <script type="module" src="./index.ts"></script>

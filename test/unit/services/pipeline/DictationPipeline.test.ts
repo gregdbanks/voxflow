@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { DictationPipeline } from '../../../../src/services/pipeline/DictationPipeline.js';
 import { AudioRecorder } from '../../../../src/services/audio/AudioRecorder.js';
 import { TextInjector } from '../../../../src/services/injection/TextInjector.js';
+import { Database } from '../../../../src/services/storage/Database.js';
+import { DictionaryRepository } from '../../../../src/services/storage/DictionaryRepository.js';
 import {
   StubActiveWindow,
   StubClipboard,
@@ -157,6 +159,35 @@ describe('DictationPipeline', () => {
     expect(events).toEqual(['recording', 'transcribing', 'idle']);
     expect(keystroke.pasteCalls).toBe(0);
     expect(clipboard.writes).toEqual([]);
+  });
+
+  it('applies the personal dictionary to the transcription before injection', async () => {
+    const pcm = Buffer.alloc(16000 * 2);
+    const mic = new StubMicrophone({ fixture: pcm });
+    const recorder = new AudioRecorder(mic);
+    const transcription: ITranscriptionService = {
+      transcribe: async () => ({ text: 'the voxflow api works great', durationMs: 1 }),
+    };
+    const clipboard = new StubClipboard('');
+    const keystroke = new StubKeystroke();
+    const injector = new TextInjector({ clipboard, keystroke, pasteDelayMs: 0, restoreDelayMs: 0 });
+    const db = new Database({ filename: ':memory:' });
+    db.migrate();
+    const dictionary = new DictionaryRepository(db);
+    dictionary.add('voxflow', 'VoxFlow', false);
+    dictionary.add('api', 'API', false);
+
+    const pipeline = new DictationPipeline({
+      recorder,
+      transcription,
+      injector,
+      dictionary,
+    });
+    await pipeline.toggle();
+    const text = await pipeline.finish();
+    expect(text).toBe('the VoxFlow API works great');
+    expect(clipboard.writes[0]).toBe('the VoxFlow API works great');
+    db.close();
   });
 
   it('ignores repeat toggles while transcribing', async () => {
