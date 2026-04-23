@@ -55,6 +55,9 @@ body {
 .dot[data-state='idle'] {
   background: #34c759;
 }
+.dot[data-state='error'] {
+  background: #ffcc00;
+}
 
 kbd {
   background: rgba(120, 120, 128, 0.16);
