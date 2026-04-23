@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut } from 'electron';
+import { app, BrowserWindow, globalShortcut, ipcMain } from 'electron';
 import { menubar } from 'menubar';
 import path from 'node:path';
 import url from 'node:url';
@@ -19,6 +19,10 @@ import { TextInjector } from '../services/injection/TextInjector.js';
 import { MacClipboard } from '../platform/MacClipboard.js';
 import { MacKeystroke } from '../platform/MacKeystroke.js';
 import { MacActiveWindowDetector } from '../services/injection/ActiveWindowDetector.js';
+import { Database } from '../services/storage/Database.js';
+import { DictionaryRepository } from '../services/storage/DictionaryRepository.js';
+import { CorrectionRepository } from '../services/storage/CorrectionRepository.js';
+import { SettingsRepository } from '../services/storage/SettingsRepository.js';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
 if (require('electron-squirrel-startup')) {
@@ -96,6 +100,26 @@ app.whenReady().then(() => {
     },
   });
 
+  let database: Database | undefined;
+  let dictionary: DictionaryRepository | undefined;
+  let corrections: CorrectionRepository | undefined;
+  let settings: SettingsRepository | undefined;
+  try {
+    database = new Database({ filename: path.join(app.getPath('userData'), 'voxflow.sqlite') });
+    const appliedMigrations = database.migrate();
+    if (appliedMigrations.length > 0) {
+      logger.info(`Applied ${appliedMigrations.length} migration(s): ${appliedMigrations.map((m) => m.name).join(', ')}`);
+    }
+    dictionary = new DictionaryRepository(database);
+    corrections = new CorrectionRepository(database);
+    settings = new SettingsRepository(database);
+  } catch (err) {
+    logger.error(
+      'Failed to open SQLite — run `npm run rebuild:native` or `npx @electron/rebuild -f -w better-sqlite3`',
+      err,
+    );
+  }
+
   const microphone = new MacMicrophone();
   const recorder = new AudioRecorder(microphone);
   const transcription = createTranscriptionService(config.groqApiKey, logger);
@@ -104,6 +128,23 @@ app.whenReady().then(() => {
     keystroke: new MacKeystroke(),
   });
   const activeWindow = new MacActiveWindowDetector();
+
+  if (dictionary) {
+    ipcMain.handle('voxflow:dictionary:list', () => dictionary!.list());
+    ipcMain.handle('voxflow:dictionary:add', (_event, payload: { pattern: string; replacement: string; caseSensitive: boolean }) => {
+      return dictionary!.add(payload.pattern, payload.replacement, payload.caseSensitive);
+    });
+    ipcMain.handle('voxflow:dictionary:remove', (_event, id: number) => {
+      dictionary!.remove(id);
+      return dictionary!.list();
+    });
+  }
+  if (settings) {
+    ipcMain.handle('voxflow:settings:get', () => settings!.get());
+    ipcMain.handle('voxflow:settings:update', (_event, patch: Partial<ReturnType<NonNullable<typeof settings>['get']>>) => {
+      return settings!.update(patch);
+    });
+  }
 
   const onPipelineEvent = (ev: PipelineEvent): void => {
     const trayState = STATE_TO_TRAY[ev.state];
@@ -125,8 +166,15 @@ app.whenReady().then(() => {
     transcription,
     injector,
     activeWindow,
-    onEvent: onPipelineEvent,
+    dictionary,
+    onEvent: (ev) => {
+      if (ev.state === 'idle' && ev.text && ev.text.length > 0 && corrections) {
+        corrections.record(ev.text, ev.text, ev.activeApp ?? null);
+      }
+      onPipelineEvent(ev);
+    },
   });
+  void pipeline;
 
   const hotkey = createHotkey({
     accelerator: config.hotkey,
@@ -158,6 +206,7 @@ app.whenReady().then(() => {
   app.on('before-quit', () => {
     hotkey.unregister();
     trayController.destroy();
+    database?.close();
   });
 });
 
