@@ -27,6 +27,16 @@ contextBridge.exposeInMainWorld('voxflow', {
   onManualPaste: (callback: (text: string) => void) => {
     ipcRenderer.on('voxflow:manual-paste', (_event, text: string) => callback(text));
   },
+  onModelProgress: (callback: (p: { percent: number; bytesWritten: number; totalBytes: number }) => void) => {
+    ipcRenderer.on('voxflow:model-progress', (_event, p) => callback(p));
+  },
+  onModelReady: (callback: () => void) => {
+    ipcRenderer.on('voxflow:model-ready', () => callback());
+  },
+  onModelError: (callback: (msg: string) => void) => {
+    ipcRenderer.on('voxflow:model-error', (_event, payload: { message: string }) => callback(payload.message));
+  },
+  getPrivacyInfo: () => ipcRenderer.invoke('voxflow:privacy-info'),
 
   dictionary: {
     list: (): Promise<DictionaryEntry[]> => ipcRenderer.invoke('voxflow:dictionary:list'),

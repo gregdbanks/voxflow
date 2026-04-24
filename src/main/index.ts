@@ -9,6 +9,16 @@ import path from 'node:path';
 // prepend, dictation dies at pipeline.begin() with "sox is not installed".
 process.env.PATH = `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH ?? ''}`;
 
+// Tell whisper.cpp / smart-whisper where to find its Metal shader file. In a
+// packaged Electron app, the file ships inside app.asar.unpacked because
+// Metal's native shader loader can't read from inside an asar archive —
+// and smart-whisper's default path points into app.asar, so without this
+// override transcription silently falls back to CPU and runs ~5x slower.
+if (app.isPackaged) {
+  const unpackedRoot = app.getAppPath().replace(/\/app\.asar$/, '/app.asar.unpacked');
+  process.env.GGML_METAL_PATH_RESOURCES = `${unpackedRoot}/node_modules/smart-whisper/whisper.cpp/ggml/src`;
+}
+
 // Bypass-console diagnostics: when running the packaged .app, electron's
 // internal logging can swallow console.log unless ELECTRON_ENABLE_LOGGING is
 // set. Writing to a file sidesteps that and gives us a crash trail.
@@ -119,13 +129,35 @@ const STATE_TO_TRAY: Record<PipelineState, TrayState> = {
 };
 
 import { NO_OP_TRANSCRIPTION_SENTINEL } from '../services/pipeline/DictationPipeline.js';
+import { LocalWhisperTranscriptionService } from '../services/transcription/LocalWhisperTranscriptionService.js';
+import { WhisperModelManager } from '../services/transcription/WhisperModelManager.js';
+import type { AppConfig } from '../shared/config.js';
 
 function createTranscriptionService(
-  apiKey: string | undefined,
+  config: AppConfig,
   logger: Logger,
+  modelManager: WhisperModelManager,
 ): ITranscriptionService {
-  if (apiKey) return new GroqTranscriptionService({ apiKey });
-  logger.warn('GROQ_API_KEY not set — using a no-op transcription service');
+  if (config.transcriptionProvider === 'local') {
+    // Local whisper.cpp inference. If the model isn't downloaded yet, the
+    // pipeline falls back to a sentinel service so the user sees a clear
+    // "downloading…" state instead of recording silently.
+    if (!modelManager.isDownloaded(config.whisperModel)) {
+      logger.warn(`Whisper model ${config.whisperModel} not downloaded — transcription gated until ready`);
+      return {
+        async transcribe() {
+          return { text: NO_OP_TRANSCRIPTION_SENTINEL, durationMs: 0 };
+        },
+      };
+    }
+    return new LocalWhisperTranscriptionService({
+      modelPath: modelManager.pathFor(config.whisperModel),
+    });
+  }
+  if (config.transcriptionProvider === 'groq' && config.groqApiKey) {
+    return new GroqTranscriptionService({ apiKey: config.groqApiKey });
+  }
+  logger.warn(`Transcription provider "${config.transcriptionProvider}" is not available — using a no-op service`);
   return {
     async transcribe() {
       return { text: NO_OP_TRANSCRIPTION_SENTINEL, durationMs: 0 };
@@ -236,7 +268,47 @@ app.whenReady().then(async () => {
 
   const microphone = new MacMicrophone();
   const recorder = new AudioRecorder(microphone);
-  const transcription = createTranscriptionService(config.groqApiKey, logger);
+  const modelManager = new WhisperModelManager();
+  let transcription = createTranscriptionService(config, logger, modelManager);
+
+  // If local is selected and the model isn't on disk yet, kick off the
+  // download in the background and swap the transcription service to the
+  // real local engine once it's ready. We emit a custom state so the UI can
+  // show progress without changing the pipeline's state machine.
+  if (config.transcriptionProvider === 'local' && !modelManager.isDownloaded(config.whisperModel)) {
+    modelManager.on('progress', (p: { percent: number; bytesWritten: number; totalBytes: number }) => {
+      try {
+        fs.appendFileSync(
+          DIAG_LOG,
+          `[${new Date().toISOString()}] model download ${p.percent}% (${p.bytesWritten}/${p.totalBytes})\n`,
+        );
+      } catch {
+        // ignore
+      }
+      broadcast(mb, 'voxflow:model-progress', p);
+    });
+    modelManager
+      .ensure(config.whisperModel)
+      .then(() => {
+        fs.appendFileSync(DIAG_LOG, `[${new Date().toISOString()}] model download done\n`);
+        transcription = new LocalWhisperTranscriptionService({
+          modelPath: modelManager.pathFor(config.whisperModel),
+        });
+        // Rewire the pipeline's transcription reference so subsequent
+        // dictations use the real local engine.
+        (pipeline as unknown as { transcription: ITranscriptionService }).transcription = transcription;
+        broadcast(mb, 'voxflow:model-ready', { model: config.whisperModel });
+      })
+      .catch((err: Error) => {
+        logger.error('Whisper model download failed', err);
+        fs.appendFileSync(
+          DIAG_LOG,
+          `[${new Date().toISOString()}] model download failed: ${err.message}\n`,
+        );
+        broadcast(mb, 'voxflow:model-error', { message: err.message });
+      });
+  }
+
   const injector = new TextInjector({
     clipboard: new MacClipboard(),
     keystroke: new MacKeystroke(),
@@ -271,6 +343,12 @@ app.whenReady().then(async () => {
   ipcMain.handle('voxflow:history:copy', async (_event, text: string) => {
     new MacClipboard().write(text);
     return true;
+  });
+  ipcMain.handle('voxflow:privacy-info', async () => {
+    return {
+      provider: config.transcriptionProvider,
+      model: config.transcriptionProvider === 'local' ? config.whisperModel : undefined,
+    };
   });
   ipcMain.handle('voxflow:stop', async () => {
     // Pill's X button. Force-reset the pipeline so a stuck recording state
