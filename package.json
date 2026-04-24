@@ -2,7 +2,29 @@
   "name": "voxflow",
   "version": "0.1.0",
   "private": true,
-  "description": "macOS voice dictation menubar app",
+  "description": "Local-first macOS voice dictation — hold Option, talk, paste. Free alternative to Wispr Flow.",
+  "keywords": [
+    "dictation",
+    "voice",
+    "whisper",
+    "groq",
+    "electron",
+    "macos",
+    "menubar"
+  ],
+  "homepage": "https://github.com/gregdbanks/voxflow#readme",
+  "bugs": {
+    "url": "https://github.com/gregdbanks/voxflow/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gregdbanks/voxflow.git"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Greg Banks",
+    "url": "https://github.com/gregdbanks"
+  },
   "main": ".vite/build/main.js",
   "scripts": {
     "start": "electron-forge start",
