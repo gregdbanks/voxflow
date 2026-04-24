@@ -1,7 +1,7 @@
 /**
  * Re-captures the M6 screenshots using the REAL Bedrock outputs collected
- * via scripts/demo-real-bedrock.ts (Sonnet 4.5 fallback — Haiku 4.5 is
- * pending a Marketplace payment fix on this account).
+ * via scripts/demo-real-bedrock.ts against the default service model
+ * (Haiku 4.5 inference profile).
  */
 import { _electron as electron } from 'playwright';
 import fs from 'node:fs';
@@ -16,10 +16,12 @@ type DomPatch = {
   transcription?: string;
 };
 
+// Verbatim outputs from scripts/demo-real-bedrock.ts against Haiku 4.5 on
+// 2026-04-23, 19:32 UTC. Total: 913 input + 93 output tokens ≈ $0.00138.
 const REAL = {
   chat: {
     before: 'um so I was thinking like we should probably ship the feature tomorrow you know',
-    after: 'I was thinking we should probably ship the feature tomorrow.',
+    after: 'So I was thinking we should probably ship the feature tomorrow.',
   },
   email: {
     before:
@@ -31,7 +33,7 @@ const REAL = {
     before:
       'add a new async function called fetch user profile that takes a user ID and returns a promise of user profile',
     after:
-      'Add a new async function called fetchUserProfile that takes a user ID and returns a promise of user profile.',
+      'add a new async function called fetchUserProfile that takes a userID and returns a promise of UserProfile',
   },
   docs: {
     before:
