@@ -2,7 +2,6 @@ import type { Database } from './Database.js';
 import type { AppSettings, ISettingsRepository } from '../../platform/interfaces.js';
 
 const DEFAULTS: AppSettings = {
-  cleanupEnabled: true,
   hotkey: 'Command+Alt+Z',
   language: 'auto',
 };
@@ -13,7 +12,6 @@ interface Row {
 }
 
 const KEY_MAP: Record<keyof AppSettings, string> = {
-  cleanupEnabled: 'cleanup_enabled',
   hotkey: 'hotkey',
   language: 'language',
 };
@@ -27,7 +25,6 @@ export class SettingsRepository implements ISettingsRepository {
       .all();
     const byKey = new Map(rows.map((r) => [r.key, r.value]));
     return {
-      cleanupEnabled: parseBool(byKey.get(KEY_MAP.cleanupEnabled), DEFAULTS.cleanupEnabled),
       hotkey: byKey.get(KEY_MAP.hotkey) ?? DEFAULTS.hotkey,
       language: byKey.get(KEY_MAP.language) ?? DEFAULTS.language,
     };
@@ -49,11 +46,5 @@ export class SettingsRepository implements ISettingsRepository {
 }
 
 function serialize(value: unknown): string {
-  if (typeof value === 'boolean') return value ? '1' : '0';
   return String(value);
-}
-
-function parseBool(raw: string | undefined, fallback: boolean): boolean {
-  if (raw === undefined) return fallback;
-  return raw === '1' || raw.toLowerCase() === 'true';
 }

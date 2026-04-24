@@ -1,7 +1,7 @@
 import { Menu, Tray, app, nativeImage } from 'electron';
 import path from 'node:path';
 
-export type TrayState = 'idle' | 'recording' | 'transcribing' | 'cleaning' | 'injecting' | 'error';
+export type TrayState = 'idle' | 'recording' | 'transcribing' | 'injecting' | 'error';
 
 export interface TrayController {
   setState(state: TrayState): void;
@@ -41,7 +41,7 @@ export function createTray(iconPath: string, onQuit: () => void): TrayController
       const title =
         state === 'recording'
           ? '●'
-          : state === 'transcribing' || state === 'cleaning' || state === 'injecting'
+          : state === 'transcribing' || state === 'injecting'
             ? '·'
             : '';
       tray.setTitle(title);

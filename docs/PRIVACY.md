@@ -37,13 +37,6 @@ Two features are deliberately *off* by default but can be enabled if you want th
 - **Groq's stated retention**: [per their docs](https://console.groq.com/docs/your-data) they do not train on submitted audio and discard inputs/outputs when the request completes. They support Zero Data Retention on request for customers who want the reliability/abuse-monitoring caches disabled too.
 - **Why you might want this**: faster first-run experience (no 1.5 GB download), or if `whisper.cpp` can't run well on your hardware.
 
-### AWS Bedrock Haiku cleanup (opt-in LLM text refinement)
-
-- **How to enable**: set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in `.env`.
-- **What leaves your machine**: the *transcribed text* (not audio) of each dictation, sent to AWS Bedrock for punctuation/grammar cleanup.
-- **AWS's stated retention**: subject to your AWS account's data agreement.
-- **Why you might want this**: nicer punctuation and capitalization on long-form dictations. Raw Whisper output is already quite clean, so most users don't need this.
-
 ## Verifying the "no network" claim yourself
 
 Run the app while watching outbound traffic:
@@ -61,7 +54,7 @@ or use [Little Snitch](https://www.obdev.at/products/littlesnitch/) / [Radio Sil
 
 - **`corrections`** table: every transcription you've ever done (original + corrected text + app name + timestamp).
 - **`dictionary`** table: your personal pattern→replacement rules.
-- **`settings`** table: cleanup-enabled toggle, hotkey override, language preference.
+- **`settings`** table: hotkey override, language preference.
 
 Delete that file to wipe your VoxFlow history. The app will recreate an empty schema on next launch.
 

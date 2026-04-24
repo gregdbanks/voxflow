@@ -5,28 +5,25 @@ describe('loadConfig', () => {
   it('returns defaults when env is empty', () => {
     const config = loadConfig({} as NodeJS.ProcessEnv);
     expect(config.logLevel).toBe('info');
-    expect(config.awsRegion).toBe('us-east-1');
     expect(config.groqApiKey).toBeUndefined();
-    expect(config.awsAccessKeyId).toBeUndefined();
-    expect(config.awsSecretAccessKey).toBeUndefined();
     expect(config.hotkey).toBe('Command+Alt+Z');
+    expect(config.transcriptionProvider).toBe('local');
+    expect(config.whisperModel).toBe('large-v3-turbo');
   });
 
   it('overrides defaults from env', () => {
     const config = loadConfig({
       LOG_LEVEL: 'debug',
       GROQ_API_KEY: 'gsk_test',
-      AWS_REGION: 'eu-west-1',
-      AWS_ACCESS_KEY_ID: 'AKIA',
-      AWS_SECRET_ACCESS_KEY: 'secret',
       VOXFLOW_HOTKEY: 'CommandOrControl+Shift+V',
+      VOXFLOW_TRANSCRIPTION_PROVIDER: 'groq',
+      VOXFLOW_WHISPER_MODEL: 'small.en',
     } as NodeJS.ProcessEnv);
     expect(config.logLevel).toBe('debug');
     expect(config.groqApiKey).toBe('gsk_test');
-    expect(config.awsRegion).toBe('eu-west-1');
-    expect(config.awsAccessKeyId).toBe('AKIA');
-    expect(config.awsSecretAccessKey).toBe('secret');
     expect(config.hotkey).toBe('CommandOrControl+Shift+V');
+    expect(config.transcriptionProvider).toBe('groq');
+    expect(config.whisperModel).toBe('small.en');
   });
 
   it('falls back to default for invalid LOG_LEVEL', () => {
@@ -37,9 +34,14 @@ describe('loadConfig', () => {
   it('treats empty string env vars as undefined for optional keys', () => {
     const config = loadConfig({
       GROQ_API_KEY: '',
-      AWS_ACCESS_KEY_ID: '',
     } as NodeJS.ProcessEnv);
     expect(config.groqApiKey).toBeUndefined();
-    expect(config.awsAccessKeyId).toBeUndefined();
+  });
+
+  it('falls back to default on invalid transcription provider', () => {
+    const config = loadConfig({
+      VOXFLOW_TRANSCRIPTION_PROVIDER: 'bogus',
+    } as NodeJS.ProcessEnv);
+    expect(config.transcriptionProvider).toBe('local');
   });
 });

@@ -1,6 +1,5 @@
 import type {
   IActiveWindow,
-  ICleanupService,
   IDictionaryRepository,
   ITranscriptionService,
 } from '../../platform/interfaces.js';
@@ -14,7 +13,6 @@ export type PipelineState =
   | 'idle'
   | 'recording'
   | 'transcribing'
-  | 'cleaning'
   | 'injecting'
   | 'error';
 
@@ -35,10 +33,6 @@ export interface DictationPipelineOptions {
   injector?: TextInjector;
   /** Optional — used to stamp each event with the focused app at record time. */
   activeWindow?: IActiveWindow;
-  /** Optional — LLM cleanup applied before dictionary. */
-  cleanup?: ICleanupService;
-  /** Optional — gate for whether to run the cleanup step (e.g. from settings). */
-  isCleanupEnabled?: () => boolean;
   /** Optional — personal dictionary applied to the transcription before injection. */
   dictionary?: IDictionaryRepository;
   onEvent?: (event: PipelineEvent) => void;
@@ -50,8 +44,6 @@ export class DictationPipeline {
   private readonly transcription: ITranscriptionService;
   private readonly injector: TextInjector | undefined;
   private readonly activeWindow: IActiveWindow | undefined;
-  private readonly cleanup: ICleanupService | undefined;
-  private readonly isCleanupEnabled: () => boolean;
   private readonly dictionary: IDictionaryRepository | undefined;
   private readonly onEvent: (event: PipelineEvent) => void;
   private readonly language: string | undefined;
@@ -63,8 +55,6 @@ export class DictationPipeline {
     this.transcription = opts.transcription;
     this.injector = opts.injector;
     this.activeWindow = opts.activeWindow;
-    this.cleanup = opts.cleanup;
-    this.isCleanupEnabled = opts.isCleanupEnabled ?? (() => true);
     this.dictionary = opts.dictionary;
     this.onEvent = opts.onEvent ?? (() => undefined);
     this.language = opts.language;
@@ -83,13 +73,13 @@ export class DictationPipeline {
       await this.finish();
       return;
     }
-    // transcribing / cleaning / injecting: ignore repeat presses
+    // transcribing / injecting: ignore repeat presses
   }
 
   /**
    * Force the pipeline back to `idle` without transcribing. Used by the
    * pill's stop-X button so the user can abort a stuck recording without
-   * waiting for Groq / Bedrock / the injector.
+   * waiting for Whisper / the injector.
    */
   async cancel(): Promise<void> {
     if (this.state === 'recording') {
@@ -159,19 +149,9 @@ export class DictationPipeline {
 
     if (text === NO_OP_TRANSCRIPTION_SENTINEL) {
       this.setState('error', {
-        error: new Error('GROQ_API_KEY is not set. Add it to .env and restart the app.'),
+        error: new Error('Transcription is not configured. Check Settings or .env.'),
       });
       return '';
-    }
-
-    if (this.cleanup && text.length > 0 && this.isCleanupEnabled()) {
-      this.setState('cleaning', { text, activeApp: this.focusedApp });
-      try {
-        text = await this.cleanup.clean({ text, activeApp: this.focusedApp });
-      } catch (err) {
-        // Cleanup is best-effort; fall back to the raw transcription on error.
-        this.onEvent({ state: 'cleaning', text, activeApp: this.focusedApp, error: err as Error });
-      }
     }
 
     if (this.dictionary && text.length > 0) {

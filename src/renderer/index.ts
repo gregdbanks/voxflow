@@ -9,7 +9,6 @@ interface DictionaryEntry {
 }
 
 interface AppSettings {
-  cleanupEnabled: boolean;
   hotkey: string;
   language: string;
 }
@@ -77,7 +76,6 @@ window.voxflow?.onStateChange((state) => {
       idle: 'Hold ⌥ to dictate (or ⌘⌥Z)',
       recording: 'Listening…',
       transcribing: 'Transcribing…',
-      cleaning: 'Cleaning up…',
       injecting: 'Pasting…',
       error: 'Error — see logs',
     };

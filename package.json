@@ -53,7 +53,6 @@
     "rebuild:node": "npm rebuild better-sqlite3"
   },
   "dependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.1036.0",
     "@paymoapp/active-window": "^2.1.4",
     "better-sqlite3": "^12.9.0",
     "clipboardy": "^5.3.1",
