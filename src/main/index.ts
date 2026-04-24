@@ -174,7 +174,14 @@ app.whenReady().then(() => {
     if (ev.text !== undefined) {
       broadcast(mb, 'voxflow:transcription', ev.text);
       if (ev.state === 'idle') {
-        logger.info(`Transcription injected (${ev.text.length} chars, app=${ev.activeApp ?? 'unknown'})`);
+        if (ev.manualPasteRequired) {
+          logger.warn(
+            `Transcription copied to clipboard — paste denied; press ⌘V to paste manually (${ev.text.length} chars).`,
+          );
+          broadcast(mb, 'voxflow:manual-paste', ev.text);
+        } else {
+          logger.info(`Transcription injected (${ev.text.length} chars, app=${ev.activeApp ?? 'unknown'})`);
+        }
       }
     }
     if (ev.error) {

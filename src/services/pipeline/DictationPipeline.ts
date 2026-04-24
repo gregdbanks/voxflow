@@ -23,6 +23,9 @@ export interface PipelineEvent {
   error?: TranscriptionError | Error;
   text?: string;
   activeApp?: string;
+  /** The final `idle` event sets this to true when Accessibility was denied
+   * and the transcription is sitting on the clipboard waiting for manual ⌘V. */
+  manualPasteRequired?: boolean;
 }
 
 export interface DictationPipelineOptions {
@@ -141,17 +144,23 @@ export class DictationPipeline {
       text = this.dictionary.applyTo(text);
     }
 
+    let manualPasteRequired = false;
     if (this.injector && text.length > 0) {
       this.setState('injecting', { text, activeApp: this.focusedApp });
       try {
-        await this.injector.inject(text);
+        const result = await this.injector.inject(text);
+        manualPasteRequired = result.manualPasteRequired;
       } catch (err) {
         this.setState('error', { error: err as Error, text, activeApp: this.focusedApp });
         throw err;
       }
     }
 
-    this.setState('idle', { text, activeApp: this.focusedApp });
+    this.setState('idle', {
+      text,
+      activeApp: this.focusedApp,
+      manualPasteRequired,
+    });
     return text;
   }
 

@@ -1,4 +1,5 @@
 import type { IClipboard, IKeystroke } from '../../platform/interfaces.js';
+import { AccessibilityPermissionError } from '../../platform/MacKeystroke.js';
 
 export interface TextInjectorOptions {
   clipboard: IClipboard;
@@ -15,6 +16,11 @@ export interface InjectionResult {
   previousClipboard: string;
   /** Whether the clipboard was successfully restored. */
   restored: boolean;
+  /** True when the keystroke was denied (e.g. macOS Accessibility) and the
+   * text is still sitting on the clipboard for the user to paste manually. */
+  manualPasteRequired: boolean;
+  /** Surface the underlying permission / keystroke error when we fell back. */
+  fallbackReason?: string;
   elapsedMs: number;
 }
 
@@ -57,8 +63,20 @@ export class TextInjector {
     try {
       await this.keystroke.sendPaste();
     } catch (err) {
-      // Leave the text on the clipboard so the user can ⌘V manually while
-      // the permission issue is being resolved. Surface the original error.
+      // If macOS denied the paste keystroke (Accessibility not granted), we
+      // leave the transcription on the clipboard so the user can ⌘V manually.
+      // This is *not* an error — it's a graceful-degradation path. Other
+      // keystroke errors still propagate.
+      if (err instanceof AccessibilityPermissionError) {
+        return {
+          injected: text,
+          previousClipboard,
+          restored: false,
+          manualPasteRequired: true,
+          fallbackReason: err.message,
+          elapsedMs: this.now() - startedAt,
+        };
+      }
       throw err;
     }
     await this.sleep(this.restoreDelayMs);
@@ -75,6 +93,7 @@ export class TextInjector {
       injected: text,
       previousClipboard,
       restored,
+      manualPasteRequired: false,
       elapsedMs: this.now() - startedAt,
     };
   }

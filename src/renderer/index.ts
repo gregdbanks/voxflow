@@ -18,6 +18,7 @@ interface VoxFlowBridge {
   onStateChange(callback: (state: string) => void): void;
   onTranscription(callback: (text: string) => void): void;
   onError?(callback: (message: string) => void): void;
+  onManualPaste?(callback: (text: string) => void): void;
   dictionary?: {
     list(): Promise<DictionaryEntry[]>;
     add(pattern: string, replacement: string, caseSensitive: boolean): Promise<DictionaryEntry>;
@@ -62,6 +63,10 @@ window.voxflow?.onTranscription((text) => {
 
 window.voxflow?.onError?.((message) => {
   if (statusEl) statusEl.textContent = `Error — ${message}`;
+});
+
+window.voxflow?.onManualPaste?.(() => {
+  if (statusEl) statusEl.textContent = 'Copied — press ⌘V to paste';
 });
 
 function activateTab(name: string): void {

@@ -24,6 +24,9 @@ contextBridge.exposeInMainWorld('voxflow', {
   onError: (callback: (message: string) => void) => {
     ipcRenderer.on('voxflow:error', (_event, message: string) => callback(message));
   },
+  onManualPaste: (callback: (text: string) => void) => {
+    ipcRenderer.on('voxflow:manual-paste', (_event, text: string) => callback(text));
+  },
 
   dictionary: {
     list: (): Promise<DictionaryEntry[]> => ipcRenderer.invoke('voxflow:dictionary:list'),

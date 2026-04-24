@@ -49,7 +49,7 @@ async function main(): Promise<void> {
 
   // Haiku 4.5 pricing (us-east-1, 2026-04): ~$0.001 / 1K input, ~$0.005 / 1K output.
   const costUsd = (totalIn * 0.001) / 1000 + (totalOut * 0.005) / 1000;
-  console.log(`\nTotal: ${totalIn} input tokens + ${totalOut} output tokens  ≈  \$${costUsd.toFixed(5)} for ${samples.length} cleanups`);
+  console.log(`\nTotal: ${totalIn} input tokens + ${totalOut} output tokens  ≈  $${costUsd.toFixed(5)} for ${samples.length} cleanups`);
 }
 
 main().catch((err) => {
