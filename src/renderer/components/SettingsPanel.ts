@@ -9,6 +9,7 @@ interface DictionaryEntry {
 interface AppSettings {
   hotkey: string;
   language: string;
+  whisperModel: string;
 }
 
 interface DictionaryBridge {
@@ -28,8 +29,38 @@ export interface MountOptions {
   settings: SettingsBridge | undefined;
 }
 
+// Model options rendered in the picker, in ascending size order. Each row
+// surfaces the tradeoff (file size + rough latency) so a user on an older
+// Mac can pick intelligently without reading the README.
+interface ModelOption {
+  id: string;
+  label: string;
+  size: string;
+  blurb: string;
+}
+
+const MODEL_OPTIONS: readonly ModelOption[] = [
+  { id: 'tiny.en', label: 'Tiny (English)', size: '75 MB', blurb: 'Fastest. Usable for short notes; sloppy on names.' },
+  { id: 'base.en', label: 'Base (English)', size: '142 MB', blurb: 'Light. Decent quality on clear speech.' },
+  { id: 'small.en', label: 'Small (English)', size: '466 MB', blurb: 'Sweet spot for older Macs. Near-instant.' },
+  { id: 'medium.en', label: 'Medium (English)', size: '1.5 GB', blurb: 'Higher accuracy; meaningful tax on 8 GB Macs.' },
+  { id: 'large-v3-turbo', label: 'Large v3 Turbo', size: '1.5 GB', blurb: 'Default. Best accuracy-to-speed on M-Pro/Max. Multilingual.' },
+  { id: 'large-v3', label: 'Large v3', size: '3 GB', blurb: 'Maximum accuracy. Slow without a Neural Engine.' },
+];
+
 export function mountSettingsPanel({ container, dictionary, settings }: MountOptions): void {
   container.innerHTML = `
+    <section class="settings-section">
+      <h3 class="settings-subheading">Transcription Model</h3>
+      <p class="settings-hint">Controls which Whisper model VoxFlow loads. Smaller = faster + less RAM. Changes apply immediately; new models download on demand.</p>
+      <select id="model-select" class="model-select" disabled aria-label="Whisper model">
+        ${MODEL_OPTIONS.map(
+          (m) => `<option value="${m.id}">${m.label} — ${m.size}</option>`,
+        ).join('')}
+      </select>
+      <p id="model-blurb" class="settings-hint model-blurb"></p>
+      <p id="model-status" class="settings-hint model-status" hidden></p>
+    </section>
     <section class="settings-section">
       <h3 class="settings-subheading">Personal Dictionary</h3>
       <form class="dict-form" autocomplete="off">
@@ -49,10 +80,59 @@ export function mountSettingsPanel({ container, dictionary, settings }: MountOpt
     </section>
   `;
 
+  const modelSelect = container.querySelector<HTMLSelectElement>('#model-select')!;
+  const modelBlurb = container.querySelector<HTMLElement>('#model-blurb')!;
+  const modelStatus = container.querySelector<HTMLElement>('#model-status')!;
   const form = container.querySelector<HTMLFormElement>('.dict-form')!;
   const list = container.querySelector<HTMLUListElement>('.dict-list')!;
   const empty = container.querySelector<HTMLParagraphElement>('.dict-empty')!;
-  void settings; // reserved for future hotkey/language editing
+
+  const updateBlurb = (): void => {
+    const pick = MODEL_OPTIONS.find((m) => m.id === modelSelect.value);
+    modelBlurb.textContent = pick?.blurb ?? '';
+  };
+
+  if (settings) {
+    void settings.get().then((s) => {
+      modelSelect.value = s.whisperModel;
+      modelSelect.disabled = false;
+      updateBlurb();
+    });
+    modelSelect.addEventListener('change', async () => {
+      const chosen = modelSelect.value;
+      modelStatus.hidden = false;
+      modelStatus.textContent = `Switching to ${chosen}…`;
+      updateBlurb();
+      await settings.update({ whisperModel: chosen });
+    });
+  } else {
+    modelBlurb.textContent = 'Settings bridge unavailable.';
+  }
+
+  // Model-download progress + readiness events come from main over IPC —
+  // listeners are wired in renderer/index.ts; they write into #model-status
+  // via the shared DOM nodes below. We mirror the signal here so the
+  // picker surfaces the current state without a tab switch.
+  const bridge = (window as unknown as {
+    voxflow?: {
+      onModelProgress?: (cb: (p: { percent: number; bytesWritten: number; totalBytes: number }) => void) => void;
+      onModelReady?: (cb: (payload: { model: string }) => void) => void;
+      onModelError?: (cb: (msg: string) => void) => void;
+    };
+  }).voxflow;
+  bridge?.onModelProgress?.((p) => {
+    modelStatus.hidden = false;
+    modelStatus.textContent = `Downloading ${modelSelect.value}… ${p.percent}%`;
+  });
+  bridge?.onModelReady?.((payload) => {
+    modelStatus.hidden = false;
+    modelStatus.textContent = `${payload.model} ready.`;
+    setTimeout(() => { modelStatus.hidden = true; }, 1500);
+  });
+  bridge?.onModelError?.((message) => {
+    modelStatus.hidden = false;
+    modelStatus.textContent = `Model error: ${message}`;
+  });
 
   if (!dictionary) {
     form.innerHTML = '<p class="dict-unavailable">Dictionary bridge unavailable.</p>';

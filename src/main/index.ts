@@ -125,18 +125,18 @@ const STATE_TO_TRAY: Record<PipelineState, TrayState> = {
 import { NO_OP_TRANSCRIPTION_SENTINEL } from '../services/pipeline/DictationPipeline.js';
 import { LocalWhisperTranscriptionService } from '../services/transcription/LocalWhisperTranscriptionService.js';
 import { WhisperModelManager } from '../services/transcription/WhisperModelManager.js';
-import type { AppConfig } from '../shared/config.js';
+import type { WhisperModelId } from '../shared/config.js';
 
 function createTranscriptionService(
-  config: AppConfig,
+  model: WhisperModelId,
   logger: Logger,
   modelManager: WhisperModelManager,
 ): ITranscriptionService {
   // Local whisper.cpp inference is the only path. If the model isn't
   // downloaded yet, the pipeline returns a sentinel so the UI can show a
   // clear "downloading…" state instead of recording into the void.
-  if (!modelManager.isDownloaded(config.whisperModel)) {
-    logger.warn(`Whisper model ${config.whisperModel} not downloaded — transcription gated until ready`);
+  if (!modelManager.isDownloaded(model)) {
+    logger.warn(`Whisper model ${model} not downloaded — transcription gated until ready`);
     return {
       async transcribe() {
         return { text: NO_OP_TRANSCRIPTION_SENTINEL, durationMs: 0 };
@@ -144,7 +144,7 @@ function createTranscriptionService(
     };
   }
   return new LocalWhisperTranscriptionService({
-    modelPath: modelManager.pathFor(config.whisperModel),
+    modelPath: modelManager.pathFor(model),
   });
 }
 
@@ -252,44 +252,66 @@ app.whenReady().then(async () => {
   const microphone = new MacMicrophone();
   const recorder = new AudioRecorder(microphone);
   const modelManager = new WhisperModelManager();
-  let transcription = createTranscriptionService(config, logger, modelManager);
 
-  // If local is selected and the model isn't on disk yet, kick off the
-  // download in the background and swap the transcription service to the
-  // real local engine once it's ready. We emit a custom state so the UI can
-  // show progress without changing the pipeline's state machine.
-  if (!modelManager.isDownloaded(config.whisperModel)) {
-    modelManager.on('progress', (p: { percent: number; bytesWritten: number; totalBytes: number }) => {
-      try {
-        fs.appendFileSync(
-          DIAG_LOG,
-          `[${new Date().toISOString()}] model download ${p.percent}% (${p.bytesWritten}/${p.totalBytes})\n`,
-        );
-      } catch {
-        // ignore
+  // Resolve the effective model on startup: settings DB wins (user's last
+  // chosen model persists across launches), then env-var override from
+  // loadConfig(), then the built-in default. `currentModel` is mutable so
+  // the settings:update IPC can hot-swap it at runtime without a restart.
+  const savedSetting = settings?.get().whisperModel as WhisperModelId | undefined;
+  const isValidModelId = (m: string): m is WhisperModelId =>
+    ['tiny.en', 'base.en', 'small.en', 'medium.en', 'large-v3-turbo', 'large-v3'].includes(m);
+  let currentModel: WhisperModelId =
+    savedSetting && isValidModelId(savedSetting) ? savedSetting : config.whisperModel;
+  let transcription = createTranscriptionService(currentModel, logger, modelManager);
+
+  // Forward download progress events to the renderer (pill + popover).
+  modelManager.on('progress', (p: { percent: number; bytesWritten: number; totalBytes: number }) => {
+    try {
+      fs.appendFileSync(
+        DIAG_LOG,
+        `[${new Date().toISOString()}] model download ${p.percent}% (${p.bytesWritten}/${p.totalBytes})\n`,
+      );
+    } catch {
+      // ignore
+    }
+    broadcast(mb, 'voxflow:model-progress', p);
+  });
+
+  async function ensureModelAndSwap(next: WhisperModelId): Promise<void> {
+    try {
+      if (!modelManager.isDownloaded(next)) {
+        await modelManager.ensure(next);
       }
-      broadcast(mb, 'voxflow:model-progress', p);
-    });
-    modelManager
-      .ensure(config.whisperModel)
-      .then(() => {
-        fs.appendFileSync(DIAG_LOG, `[${new Date().toISOString()}] model download done\n`);
-        transcription = new LocalWhisperTranscriptionService({
-          modelPath: modelManager.pathFor(config.whisperModel),
-        });
-        // Rewire the pipeline's transcription reference so subsequent
-        // dictations use the real local engine.
-        (pipeline as unknown as { transcription: ITranscriptionService }).transcription = transcription;
-        broadcast(mb, 'voxflow:model-ready', { model: config.whisperModel });
-      })
-      .catch((err: Error) => {
-        logger.error('Whisper model download failed', err);
-        fs.appendFileSync(
-          DIAG_LOG,
-          `[${new Date().toISOString()}] model download failed: ${err.message}\n`,
-        );
-        broadcast(mb, 'voxflow:model-error', { message: err.message });
+      fs.appendFileSync(DIAG_LOG, `[${new Date().toISOString()}] model swap → ${next}\n`);
+      // Dispose the current engine so its model file is unloaded from RAM
+      // before the new one is mmapped. Only applies if the current engine
+      // is a real LocalWhisperTranscriptionService (not the sentinel).
+      if (transcription instanceof LocalWhisperTranscriptionService) {
+        try { await transcription.dispose(); } catch {
+          // Already disposed or never fully loaded — either way, proceed.
+        }
+      }
+      currentModel = next;
+      transcription = new LocalWhisperTranscriptionService({
+        modelPath: modelManager.pathFor(next),
       });
+      (pipeline as unknown as { transcription: ITranscriptionService }).transcription = transcription;
+      broadcast(mb, 'voxflow:model-ready', { model: next });
+    } catch (err) {
+      const message = (err as Error).message;
+      logger.error('Whisper model swap failed', err);
+      fs.appendFileSync(
+        DIAG_LOG,
+        `[${new Date().toISOString()}] model swap failed (${next}): ${message}\n`,
+      );
+      broadcast(mb, 'voxflow:model-error', { message });
+    }
+  }
+
+  // Kick off initial download if the chosen model isn't cached yet — the
+  // pipeline falls back to the no-op sentinel in the meantime.
+  if (!modelManager.isDownloaded(currentModel)) {
+    void ensureModelAndSwap(currentModel);
   }
 
   const injector = new TextInjector({
@@ -314,8 +336,16 @@ app.whenReady().then(async () => {
   }
   if (settings) {
     ipcMain.handle('voxflow:settings:get', () => settings!.get());
-    ipcMain.handle('voxflow:settings:update', (_event, patch: Partial<ReturnType<NonNullable<typeof settings>['get']>>) => {
-      return settings!.update(patch);
+    ipcMain.handle('voxflow:settings:update', async (_event, patch: Partial<ReturnType<NonNullable<typeof settings>['get']>>) => {
+      const next = settings!.update(patch);
+      // If the whisperModel changed, kick off a hot-swap in the background.
+      // The IPC call resolves immediately with the new settings; the
+      // renderer listens for voxflow:model-progress / model-ready events
+      // to reflect download or load state.
+      if (patch.whisperModel && isValidModelId(patch.whisperModel) && patch.whisperModel !== currentModel) {
+        void ensureModelAndSwap(patch.whisperModel);
+      }
+      return next;
     });
   }
   if (corrections) {
@@ -328,7 +358,7 @@ app.whenReady().then(async () => {
     return true;
   });
   ipcMain.handle('voxflow:privacy-info', async () => {
-    return { provider: 'local', model: config.whisperModel };
+    return { provider: 'local', model: currentModel };
   });
   ipcMain.handle('voxflow:stop', async () => {
     // Pill's X button. Force-reset the pipeline so a stuck recording state

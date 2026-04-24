@@ -11,6 +11,7 @@ interface DictionaryEntry {
 interface AppSettings {
   hotkey: string;
   language: string;
+  whisperModel: string;
 }
 
 interface HistoryEntry {

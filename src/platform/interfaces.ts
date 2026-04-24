@@ -68,6 +68,7 @@ export interface ICorrectionRepository {
 export interface AppSettings {
   hotkey: string;
   language: string;
+  whisperModel: string;
 }
 
 export interface ISettingsRepository {

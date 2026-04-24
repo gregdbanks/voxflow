@@ -13,6 +13,7 @@ describe('SettingsRepository', () => {
     const settings = fresh().get();
     expect(settings.hotkey).toBe('Command+Alt+Z');
     expect(settings.language).toBe('auto');
+    expect(settings.whisperModel).toBe('large-v3-turbo');
   });
 
   it('merges partial updates and round-trips', () => {
@@ -20,6 +21,7 @@ describe('SettingsRepository', () => {
     const after = repo.update({ language: 'en' });
     expect(after.language).toBe('en');
     expect(after.hotkey).toBe('Command+Alt+Z');
+    expect(after.whisperModel).toBe('large-v3-turbo');
 
     const reloaded = repo.get();
     expect(reloaded).toEqual(after);
@@ -29,5 +31,12 @@ describe('SettingsRepository', () => {
     const repo = fresh();
     const after = repo.update({ hotkey: 'Option+Space' });
     expect(after.hotkey).toBe('Option+Space');
+  });
+
+  it('persists whisperModel changes', () => {
+    const repo = fresh();
+    const after = repo.update({ whisperModel: 'small.en' });
+    expect(after.whisperModel).toBe('small.en');
+    expect(repo.get().whisperModel).toBe('small.en');
   });
 });
