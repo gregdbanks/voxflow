@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut, ipcMain } from 'electron';
+import { app, BrowserWindow, globalShortcut, ipcMain, systemPreferences } from 'electron';
 import { menubar } from 'menubar';
 import dotenv from 'dotenv';
 import fs from 'node:fs';
@@ -46,7 +46,7 @@ for (const candidate of [
 }
 import { createLogger, type Logger } from '../shared/logger.js';
 import { createTray, defaultTrayIconPath, type TrayState } from './tray.js';
-import { createHotkey } from './hotkey.js';
+import { PillWindow } from './pill.js';
 import { AudioRecorder } from '../services/audio/AudioRecorder.js';
 import { MacMicrophone } from '../platform/MacMicrophone.js';
 import { GroqTranscriptionService } from '../services/transcription/TranscriptionService.js';
@@ -73,6 +73,14 @@ if (require('electron-squirrel-startup')) {
 
 const config = loadConfig();
 const logger = createLogger({ level: config.logLevel });
+try {
+  fs.appendFileSync(
+    DIAG_LOG,
+    `[${new Date().toISOString()}] config loaded; groqKey=${config.groqApiKey ? 'set' : 'MISSING'} awsKey=${config.awsAccessKeyId ? 'set' : 'unset'} awsRegion=${config.awsRegion}\n`,
+  );
+} catch {
+  // ignore
+}
 
 if (process.platform === 'darwin') {
   app.dock?.hide();
@@ -120,8 +128,29 @@ function createTranscriptionService(
   };
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   logger.info('VoxFlow starting');
+
+  // Microphone permission: without this the mic port silently delivers 0
+  // bytes and Whisper hallucinates training-set phrases ("Thank you.",
+  // "Thanks for watching.") on the resulting silence. Log the status and
+  // proactively trigger the system prompt if not yet decided.
+  try {
+    const micStatus = systemPreferences.getMediaAccessStatus('microphone');
+    fs.appendFileSync(DIAG_LOG, `[${new Date().toISOString()}] mic status=${micStatus}\n`);
+    if (micStatus !== 'granted') {
+      const granted = await systemPreferences.askForMediaAccess('microphone');
+      fs.appendFileSync(
+        DIAG_LOG,
+        `[${new Date().toISOString()}] mic askForMediaAccess=${granted}\n`,
+      );
+    }
+  } catch (err) {
+    fs.appendFileSync(
+      DIAG_LOG,
+      `[${new Date().toISOString()}] mic status check failed: ${(err as Error).message}\n`,
+    );
+  }
 
   const iconPath = defaultTrayIconPath();
   const trayController = createTray(iconPath, () => {
@@ -190,10 +219,48 @@ app.whenReady().then(() => {
       return settings!.update(patch);
     });
   }
+  if (corrections) {
+    ipcMain.handle('voxflow:history:list', (_event, limit: number = 25) => {
+      return corrections!.recent(limit);
+    });
+  }
+  ipcMain.handle('voxflow:history:copy', async (_event, text: string) => {
+    new MacClipboard().write(text);
+    return true;
+  });
+  ipcMain.handle('voxflow:history:reinject', async (_event, text: string) => {
+    // Hide the popover first so focus returns to the user's previous app
+    // before we paste. Paste will no-op in non-editable contexts.
+    mb.hideWindow();
+    await new Promise((r) => setTimeout(r, 150));
+    const inj = new TextInjector({ clipboard: new MacClipboard(), keystroke: new MacKeystroke() });
+    await inj.inject(text);
+    return true;
+  });
+
+  const pill = new PillWindow();
 
   const onPipelineEvent = (ev: PipelineEvent): void => {
+    try {
+      const textLen = ev.text !== undefined ? ev.text.length : -1;
+      const errMsg = ev.error ? ev.error.message : '';
+      fs.appendFileSync(
+        DIAG_LOG,
+        `[${new Date().toISOString()}] state=${ev.state} textLen=${textLen} manualPaste=${ev.manualPasteRequired ?? false} err=${errMsg}\n`,
+      );
+    } catch {
+      // ignore
+    }
     const trayState = STATE_TO_TRAY[ev.state];
     trayController.setState(trayState);
+    pill.update(ev.state);
+    // Clear the clipboard the moment the user releases the hotkey so a fast
+    // ⌘V during transcribe/clean doesn't paste the stale clipboard contents.
+    // TextInjector will refill it with the real transcription once the
+    // pipeline reaches the 'injecting' state.
+    if (ev.state === 'transcribing') {
+      void new MacClipboard().write('').catch(() => undefined);
+    }
     broadcast(mb, 'voxflow:state', ev.state);
     if (ev.text !== undefined) {
       broadcast(mb, 'voxflow:transcription', ev.text);
@@ -241,21 +308,39 @@ app.whenReady().then(() => {
   });
   void pipeline;
 
-  const hotkey = createHotkey({
-    accelerator: config.hotkey,
-    onTrigger: () => {
-      pipeline.toggle().catch((err) => logger.error('Pipeline toggle failed', err));
-    },
-    shortcut: globalShortcut,
-  });
+  // In-process hotkey (TOGGLE mode — tap to start, tap to stop). Runs inside
+  // the main Electron process which has a working Accessibility grant.
+  // We tried a native CGEventTap subprocess for press-and-hold but unsigned
+  // subprocess Accessibility on macOS is unreliable: the Accessibility toggle
+  // can appear "on" in System Settings while AXIsProcessTrusted silently
+  // returns false. Until the app is code-signed with an Apple Developer ID,
+  // globalShortcut + toggle is the reliable path.
+  const registerHotkey = (): boolean => {
+    return globalShortcut.register(config.hotkey, () => {
+      try {
+        fs.appendFileSync(DIAG_LOG, `[${new Date().toISOString()}] hotkey toggle\n`);
+      } catch {
+        // ignore
+      }
+      pipeline.toggle().catch((err: Error) => {
+        fs.appendFileSync(
+          DIAG_LOG,
+          `[${new Date().toISOString()}] TOGGLE FAILED: ${err.stack ?? err.message}\n`,
+        );
+      });
+    });
+  };
 
   mb.on('ready', () => {
     logger.info('Menubar ready');
-    const ok = hotkey.register();
-    if (!ok) {
-      logger.warn(`Failed to register hotkey ${config.hotkey}`);
-    } else {
-      logger.info(`Hotkey registered: ${config.hotkey}`);
+    const ok = registerHotkey();
+    try {
+      fs.appendFileSync(
+        DIAG_LOG,
+        `[${new Date().toISOString()}] menubar-ready; hotkey=${config.hotkey} registered=${ok}\n`,
+      );
+    } catch {
+      // ignore
     }
     onPipelineEvent({ state: 'idle' });
   });
@@ -269,7 +354,8 @@ app.whenReady().then(() => {
   });
 
   app.on('before-quit', () => {
-    hotkey.unregister();
+    globalShortcut.unregisterAll();
+    pill.destroy();
     trayController.destroy();
     database?.close();
   });

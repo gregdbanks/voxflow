@@ -39,4 +39,11 @@ contextBridge.exposeInMainWorld('voxflow', {
     update: (patch: Partial<AppSettings>): Promise<AppSettings> =>
       ipcRenderer.invoke('voxflow:settings:update', patch),
   },
+  history: {
+    list: (limit?: number): Promise<unknown[]> =>
+      ipcRenderer.invoke('voxflow:history:list', limit ?? 25),
+    copy: (text: string): Promise<boolean> => ipcRenderer.invoke('voxflow:history:copy', text),
+    reinject: (text: string): Promise<boolean> =>
+      ipcRenderer.invoke('voxflow:history:reinject', text),
+  },
 });

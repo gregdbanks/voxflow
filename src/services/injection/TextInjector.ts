@@ -38,14 +38,12 @@ export class TextInjector {
   private readonly clipboard: IClipboard;
   private readonly keystroke: IKeystroke;
   private readonly pasteDelayMs: number;
-  private readonly restoreDelayMs: number;
   private readonly now: () => number;
 
   constructor(options: TextInjectorOptions) {
     this.clipboard = options.clipboard;
     this.keystroke = options.keystroke;
     this.pasteDelayMs = options.pasteDelayMs ?? 25;
-    this.restoreDelayMs = options.restoreDelayMs ?? 250;
     this.now = options.now ?? Date.now;
   }
 
@@ -79,20 +77,17 @@ export class TextInjector {
       }
       throw err;
     }
-    await this.sleep(this.restoreDelayMs);
 
-    let restored = false;
-    try {
-      await this.clipboard.write(previousClipboard);
-      restored = true;
-    } catch {
-      restored = false;
-    }
+    // Deliberately NOT restoring the clipboard: the async CGEvent paste can
+    // race with the restore write and cause the target app to paste the
+    // pre-dictation clipboard instead of the transcription. Leaving the
+    // transcription on the clipboard also lets the user ⌘V again to re-paste
+    // into a different field — closer to Wispr's behavior.
 
     return {
       injected: text,
       previousClipboard,
-      restored,
+      restored: false,
       manualPasteRequired: false,
       elapsedMs: this.now() - startedAt,
     };
