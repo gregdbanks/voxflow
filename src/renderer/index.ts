@@ -225,6 +225,10 @@ window.voxflow?.onModelProgress?.((p) => {
 });
 window.voxflow?.onModelReady?.(() => {
   if (modelDownloadEl) modelDownloadEl.hidden = true;
+  // Refresh the privacy badge so its "(model-name)" suffix reflects the
+  // current engine after a hot-swap. Without this the badge shows stale
+  // info until the popover is reopened.
+  void window.voxflow?.getPrivacyInfo?.().then(paintPrivacy);
 });
 window.voxflow?.onModelError?.((msg) => {
   if (statusEl) statusEl.textContent = `Model download failed: ${msg}`;
