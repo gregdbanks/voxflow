@@ -30,13 +30,18 @@ error`).
 
 ```bash
 npm install
-npx @electron/rebuild -f -w better-sqlite3    # once — rebuild native for Electron
-brew install sox                              # mic capture
-npm start
+brew install sox
+cp .env.example .env          # then fill in GROQ_API_KEY
+npm start                     # rebuilds better-sqlite3 for Electron and launches
 ```
 
-Grant **Accessibility** and **Microphone** permission to the launching process
-(Terminal, iTerm, VS Code…) the first time Cmd+Shift+Space is pressed.
+Two macOS permissions the app needs the first time you use it:
+
+- **Microphone** — granted automatically on the first prompt.
+- **Accessibility** — required for the Cmd+V paste. **This permission is granted to the launching binary, not to Terminal.**
+  - In dev (`npm start`), the binary is `node_modules/electron/dist/Electron.app`. Open System Settings → Privacy & Security → Accessibility → click **+** → navigate to that path and add `Electron.app`.
+  - In a packaged build (`npx electron-forge package` → `out/VoxFlow-darwin-arm64/VoxFlow.app`), it's the `VoxFlow` app itself.
+  - After granting, fully quit and re-launch — macOS doesn't honor the new permission until the process restarts.
 
 ## Scripts
 

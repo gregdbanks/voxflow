@@ -1,8 +1,25 @@
 import { app, BrowserWindow, globalShortcut, ipcMain } from 'electron';
 import { menubar } from 'menubar';
+import dotenv from 'dotenv';
+import fs from 'node:fs';
 import path from 'node:path';
 import url from 'node:url';
 import { loadConfig } from '../shared/config.js';
+
+// Load .env from the project root in dev, or from the app resources dir when
+// packaged. Electron Forge doesn't auto-load .env files — without this, the
+// main process sees neither GROQ_API_KEY nor AWS_* and silently falls back
+// to the no-op transcription service.
+for (const candidate of [
+  path.resolve(process.cwd(), '.env'),
+  path.join(app.getAppPath(), '.env'),
+  path.join(path.dirname(app.getAppPath()), '.env'),
+]) {
+  if (fs.existsSync(candidate)) {
+    dotenv.config({ path: candidate });
+    break;
+  }
+}
 import { createLogger, type Logger } from '../shared/logger.js';
 import { createTray, defaultTrayIconPath, type TrayState } from './tray.js';
 import { createHotkey } from './hotkey.js';
@@ -64,6 +81,8 @@ const STATE_TO_TRAY: Record<PipelineState, TrayState> = {
   error: 'error',
 };
 
+import { NO_OP_TRANSCRIPTION_SENTINEL } from '../services/pipeline/DictationPipeline.js';
+
 function createTranscriptionService(
   apiKey: string | undefined,
   logger: Logger,
@@ -72,7 +91,7 @@ function createTranscriptionService(
   logger.warn('GROQ_API_KEY not set — using a no-op transcription service');
   return {
     async transcribe() {
-      return { text: '(no transcription — set GROQ_API_KEY)', durationMs: 0 };
+      return { text: NO_OP_TRANSCRIPTION_SENTINEL, durationMs: 0 };
     },
   };
 }

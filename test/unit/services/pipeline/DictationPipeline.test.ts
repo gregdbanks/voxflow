@@ -1,5 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
-import { DictationPipeline } from '../../../../src/services/pipeline/DictationPipeline.js';
+import {
+  DictationPipeline,
+  NO_OP_TRANSCRIPTION_SENTINEL,
+} from '../../../../src/services/pipeline/DictationPipeline.js';
 import { AudioRecorder } from '../../../../src/services/audio/AudioRecorder.js';
 import { TextInjector } from '../../../../src/services/injection/TextInjector.js';
 import { Database } from '../../../../src/services/storage/Database.js';
@@ -292,6 +295,32 @@ describe('DictationPipeline', () => {
     expect(text).toBe('the VoxFlow API works great');
     expect(clipboard.writes[0]).toBe('the VoxFlow API works great');
     db.close();
+  });
+
+  it('lands in error and skips injection when transcription returns the no-op sentinel', async () => {
+    const pcm = Buffer.alloc(16000 * 2);
+    const mic = new StubMicrophone({ fixture: pcm });
+    const recorder = new AudioRecorder(mic);
+    const transcription: ITranscriptionService = {
+      transcribe: async () => ({ text: NO_OP_TRANSCRIPTION_SENTINEL, durationMs: 0 }),
+    };
+    const clipboard = new StubClipboard('original');
+    const keystroke = new StubKeystroke();
+    const injector = new TextInjector({ clipboard, keystroke, pasteDelayMs: 0, restoreDelayMs: 0 });
+    const events: Array<{ state: string; error?: string }> = [];
+    const pipeline = new DictationPipeline({
+      recorder,
+      transcription,
+      injector,
+      onEvent: (ev) => events.push({ state: ev.state, error: ev.error?.message }),
+    });
+    await pipeline.toggle();
+    const result = await pipeline.finish();
+    expect(result).toBe('');
+    expect(events.at(-1)!.state).toBe('error');
+    expect(events.at(-1)!.error).toMatch(/GROQ_API_KEY/);
+    expect(keystroke.pasteCalls).toBe(0);
+    expect(clipboard.writes).toEqual([]);
   });
 
   it('ignores repeat toggles while transcribing', async () => {

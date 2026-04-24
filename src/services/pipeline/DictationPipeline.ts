@@ -8,6 +8,8 @@ import { AudioRecorder, type RecordingResult } from '../audio/AudioRecorder.js';
 import { TranscriptionError } from '../transcription/TranscriptionService.js';
 import type { TextInjector } from '../injection/TextInjector.js';
 
+export const NO_OP_TRANSCRIPTION_SENTINEL = '__voxflow_noop_no_api_key__';
+
 export type PipelineState =
   | 'idle'
   | 'recording'
@@ -116,6 +118,13 @@ export class DictationPipeline {
     } catch (err) {
       this.setState('error', { error: err as Error });
       throw err;
+    }
+
+    if (text === NO_OP_TRANSCRIPTION_SENTINEL) {
+      this.setState('error', {
+        error: new Error('GROQ_API_KEY is not set. Add it to .env and restart the app.'),
+      });
+      return '';
     }
 
     if (this.cleanup && text.length > 0 && this.isCleanupEnabled()) {
