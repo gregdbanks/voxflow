@@ -15,7 +15,7 @@ const DEFAULTS: AppConfig = {
   awsRegion: 'us-east-1',
   awsAccessKeyId: undefined,
   awsSecretAccessKey: undefined,
-  hotkey: 'CommandOrControl+Shift+Space',
+  hotkey: 'Command+Alt+Z',
 };
 
 const VALID_LOG_LEVELS: ReadonlyArray<LogLevel> = ['debug', 'info', 'warn', 'error'];

@@ -3,7 +3,7 @@ import type { AppSettings, ISettingsRepository } from '../../platform/interfaces
 
 const DEFAULTS: AppSettings = {
   cleanupEnabled: true,
-  hotkey: 'CommandOrControl+Shift+Space',
+  hotkey: 'Command+Alt+Z',
   language: 'auto',
 };
 

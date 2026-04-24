@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 
 INSERT OR IGNORE INTO settings(key, value) VALUES ('cleanup_enabled', '1');
-INSERT OR IGNORE INTO settings(key, value) VALUES ('hotkey', 'CommandOrControl+Shift+Space');
+INSERT OR IGNORE INTO settings(key, value) VALUES ('hotkey', 'Command+Alt+Z');
 INSERT OR IGNORE INTO settings(key, value) VALUES ('language', 'auto');
 `.trim(),
   },

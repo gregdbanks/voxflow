@@ -86,6 +86,23 @@ export class DictationPipeline {
     // transcribing / cleaning / injecting: ignore repeat presses
   }
 
+  /**
+   * Force the pipeline back to `idle` without transcribing. Used by the
+   * pill's stop-X button so the user can abort a stuck recording without
+   * waiting for Groq / Bedrock / the injector.
+   */
+  async cancel(): Promise<void> {
+    if (this.state === 'recording') {
+      try {
+        await this.recorder.stop();
+      } catch {
+        // swallow — we're force-resetting anyway
+      }
+    }
+    this.focusedApp = undefined;
+    this.setState('idle');
+  }
+
   async begin(): Promise<void> {
     if (this.state !== 'idle' && this.state !== 'error') {
       throw new Error(`Cannot begin pipeline in state ${this.state}`);

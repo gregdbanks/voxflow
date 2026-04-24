@@ -59,7 +59,7 @@ window.voxflow?.onStateChange((state) => {
   if (dotEl) dotEl.dataset.state = state;
   if (statusEl) {
     const labels: Record<string, string> = {
-      idle: 'Press ⌘⇧Space to dictate',
+      idle: 'Hold ⌥ to dictate (or ⌘⌥Z)',
       recording: 'Listening…',
       transcribing: 'Transcribing…',
       cleaning: 'Cleaning up…',

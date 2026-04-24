@@ -4,6 +4,11 @@ import dotenv from 'dotenv';
 import fs from 'node:fs';
 import path from 'node:path';
 
+// GUI-launched apps inherit a minimal PATH that omits Homebrew's bin dirs.
+// node-mic shells out to `sox`/`rec` via shelljs.which(), so without this
+// prepend, dictation dies at pipeline.begin() with "sox is not installed".
+process.env.PATH = `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH ?? ''}`;
+
 // Bypass-console diagnostics: when running the packaged .app, electron's
 // internal logging can swallow console.log unless ELECTRON_ENABLE_LOGGING is
 // set. Writing to a file sidesteps that and gives us a crash trail.
@@ -135,15 +140,33 @@ app.whenReady().then(async () => {
   // bytes and Whisper hallucinates training-set phrases ("Thank you.",
   // "Thanks for watching.") on the resulting silence. Log the status and
   // proactively trigger the system prompt if not yet decided.
+  //
+  // The `app.dock.show() + app.focus()` dance is important: for menubar apps
+  // without a visible window or dock icon, macOS buries the permission
+  // prompt behind other windows, and the user has to click the tray icon to
+  // surface it. Briefly showing the dock gives the process an on-screen
+  // identity, the prompt pops to the front, and we re-hide the dock as soon
+  // as the user responds.
   try {
     const micStatus = systemPreferences.getMediaAccessStatus('microphone');
     fs.appendFileSync(DIAG_LOG, `[${new Date().toISOString()}] mic status=${micStatus}\n`);
     if (micStatus !== 'granted') {
+      if (process.platform === 'darwin') {
+        try {
+          await app.dock?.show();
+        } catch {
+          // ignore — Electron versions without this method fall through
+        }
+      }
+      app.focus({ steal: true });
       const granted = await systemPreferences.askForMediaAccess('microphone');
       fs.appendFileSync(
         DIAG_LOG,
         `[${new Date().toISOString()}] mic askForMediaAccess=${granted}\n`,
       );
+      if (process.platform === 'darwin') {
+        app.dock?.hide();
+      }
     }
   } catch (err) {
     fs.appendFileSync(
@@ -220,6 +243,10 @@ app.whenReady().then(async () => {
   });
   const activeWindow = new MacActiveWindowDetector();
 
+  // Late-bound reference so IPC handlers registered before the pipeline
+  // is constructed can still reach it once it exists.
+  const pipelineRef: { current: DictationPipeline | null } = { current: null };
+
   if (dictionary) {
     ipcMain.handle('voxflow:dictionary:list', () => dictionary!.list());
     ipcMain.handle('voxflow:dictionary:add', (_event, payload: { pattern: string; replacement: string; caseSensitive: boolean }) => {
@@ -245,6 +272,20 @@ app.whenReady().then(async () => {
     new MacClipboard().write(text);
     return true;
   });
+  ipcMain.handle('voxflow:stop', async () => {
+    // Pill's X button. Force-reset the pipeline so a stuck recording state
+    // doesn't require a full quit/relaunch cycle.
+    try {
+      // pipeline is defined below; we capture it via the late-binding ref.
+      if (pipelineRef.current) await pipelineRef.current.cancel();
+    } catch (err) {
+      fs.appendFileSync(
+        DIAG_LOG,
+        `[${new Date().toISOString()}] pipeline.cancel failed: ${(err as Error).message}\n`,
+      );
+    }
+    return true;
+  });
   ipcMain.handle('voxflow:history:reinject', async (_event, text: string) => {
     // Hide the popover first so focus returns to the user's previous app
     // before we paste. Paste will no-op in non-editable contexts.
@@ -256,6 +297,10 @@ app.whenReady().then(async () => {
   });
 
   const pill = new PillWindow();
+  // Hook the mic's RMS level into the pill so the waveform bars dance in
+  // real time while recording. The listener fires whenever node-mic emits a
+  // PCM chunk (~20 Hz at 16 kHz / 800-sample chunks).
+  microphone.setLevelListener((level) => pill.level(level));
 
   const onPipelineEvent = (ev: PipelineEvent): void => {
     try {
@@ -335,19 +380,78 @@ app.whenReady().then(async () => {
       onPipelineEvent(ev);
     },
   });
-  void pipeline;
+  pipelineRef.current = pipeline;
 
-  // In-process hotkey (TOGGLE mode — tap to start, tap to stop). Runs inside
-  // the main Electron process which has a working Accessibility grant.
-  // We tried a native CGEventTap subprocess for press-and-hold but unsigned
-  // subprocess Accessibility on macOS is unreliable: the Accessibility toggle
-  // can appear "on" in System Settings while AXIsProcessTrusted silently
-  // returns false. Until the app is code-signed with an Apple Developer ID,
-  // globalShortcut + toggle is the reliable path.
-  const registerHotkey = (): boolean => {
+  // Press-and-hold on the bare Option (⌥) key via uiohook-napi. Runs
+  // IN-PROCESS inside the main Electron binary which already has
+  // Accessibility — so we dodge the subprocess TCC mess the standalone
+  // key-listener hit. Option down starts recording, Option up ends it.
+  // If the user presses Option+letter for a special character, recording
+  // simply continues and the character types through as normal.
+  let uioStarted = false;
+  let optionHeld = false;
+  let beginInFlight: Promise<void> | null = null;
+  const installUiohook = async (): Promise<boolean> => {
+    try {
+      const { uIOhook, UiohookKey } = await import('uiohook-napi');
+      // Both Alt keycodes (left + right) — macOS surfaces each physical
+      // Option key with its own keycode.
+      const ALT_KEYCODES = new Set<number>([UiohookKey.Alt, UiohookKey.AltRight]);
+
+      uIOhook.on('keydown', (ev) => {
+        if (!ALT_KEYCODES.has(ev.keycode) || optionHeld) return;
+        optionHeld = true;
+        try {
+          fs.appendFileSync(DIAG_LOG, `[${new Date().toISOString()}] uio option down\n`);
+        } catch {
+          // ignore
+        }
+        beginInFlight = pipeline.begin().catch((err: Error) => {
+          fs.appendFileSync(
+            DIAG_LOG,
+            `[${new Date().toISOString()}] BEGIN FAILED: ${err.stack ?? err.message}\n`,
+          );
+        });
+      });
+
+      uIOhook.on('keyup', async (ev) => {
+        if (!ALT_KEYCODES.has(ev.keycode) || !optionHeld) return;
+        optionHeld = false;
+        try {
+          fs.appendFileSync(DIAG_LOG, `[${new Date().toISOString()}] uio option up\n`);
+        } catch {
+          // ignore
+        }
+        if (beginInFlight) {
+          await beginInFlight;
+          beginInFlight = null;
+        }
+        pipeline.finish().catch((err: Error) => {
+          fs.appendFileSync(
+            DIAG_LOG,
+            `[${new Date().toISOString()}] FINISH FAILED: ${err.stack ?? err.message}\n`,
+          );
+        });
+      });
+
+      uIOhook.start();
+      uioStarted = true;
+      return true;
+    } catch (err) {
+      fs.appendFileSync(
+        DIAG_LOG,
+        `[${new Date().toISOString()}] uiohook install failed: ${(err as Error).message}\n`,
+      );
+      return false;
+    }
+  };
+
+  // Fallback: if uiohook fails to load/start, keep the Cmd+Option+Z toggle
+  // working so the user isn't stranded without a hotkey.
+  const registerFallbackHotkey = (): boolean => {
     return globalShortcut.register(config.hotkey, () => {
       try {
-        fs.appendFileSync(DIAG_LOG, `[${new Date().toISOString()}] hotkey toggle\n`);
+        fs.appendFileSync(DIAG_LOG, `[${new Date().toISOString()}] fallback hotkey toggle\n`);
       } catch {
         // ignore
       }
@@ -360,13 +464,17 @@ app.whenReady().then(async () => {
     });
   };
 
-  mb.on('ready', () => {
+  mb.on('ready', async () => {
     logger.info('Menubar ready');
-    const ok = registerHotkey();
+    const uioOk = await installUiohook();
+    // Always register the Cmd+Option+Z toggle too — it's a harmless backup
+    // and gives the user a way to trigger dictation if uiohook is deafened
+    // for any reason (e.g. Accessibility reset).
+    const fbOk = registerFallbackHotkey();
     try {
       fs.appendFileSync(
         DIAG_LOG,
-        `[${new Date().toISOString()}] menubar-ready; hotkey=${config.hotkey} registered=${ok}\n`,
+        `[${new Date().toISOString()}] menubar-ready; uiohook=${uioOk} fallback=${config.hotkey} registered=${fbOk}\n`,
       );
     } catch {
       // ignore
@@ -383,6 +491,9 @@ app.whenReady().then(async () => {
   });
 
   app.on('before-quit', () => {
+    if (uioStarted) {
+      void import('uiohook-napi').then((m) => m.uIOhook.stop()).catch(() => undefined);
+    }
     globalShortcut.unregisterAll();
     pill.destroy();
     trayController.destroy();

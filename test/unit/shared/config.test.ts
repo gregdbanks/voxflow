@@ -9,7 +9,7 @@ describe('loadConfig', () => {
     expect(config.groqApiKey).toBeUndefined();
     expect(config.awsAccessKeyId).toBeUndefined();
     expect(config.awsSecretAccessKey).toBeUndefined();
-    expect(config.hotkey).toBe('CommandOrControl+Shift+Space');
+    expect(config.hotkey).toBe('Command+Alt+Z');
   });
 
   it('overrides defaults from env', () => {

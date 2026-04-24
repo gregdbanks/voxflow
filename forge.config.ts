@@ -21,6 +21,7 @@ const NATIVE_EXTERNAL_DEP_ROOTS = [
   'node-mic',
   '@paymoapp/active-window',
   'electron-squirrel-startup',
+  'uiohook-napi',
 ];
 
 function copyDirRecursive(src: string, dest: string): void {
