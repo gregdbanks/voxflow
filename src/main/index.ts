@@ -316,13 +316,6 @@ app.whenReady().then(async () => {
     const trayState = STATE_TO_TRAY[ev.state];
     trayController.setState(trayState);
     pill.update(ev.state);
-    // Clear the clipboard the moment the user releases the hotkey so a fast
-    // ⌘V during transcribe/clean doesn't paste the stale clipboard contents.
-    // TextInjector will refill it with the real transcription once the
-    // pipeline reaches the 'injecting' state.
-    if (ev.state === 'transcribing') {
-      void new MacClipboard().write('').catch(() => undefined);
-    }
     broadcast(mb, 'voxflow:state', ev.state);
     if (ev.text !== undefined) {
       broadcast(mb, 'voxflow:transcription', ev.text);

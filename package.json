@@ -27,7 +27,7 @@
     "screenshots:m4": "tsx scripts/capture-m4-screenshots.ts",
     "screenshots:m5": "tsx scripts/capture-m5-screenshots.ts",
     "test:integration": "VOXFLOW_INTEGRATION=1 vitest run --config vitest.integration.config.ts",
-    "rebuild:native": "electron-rebuild -f -w better-sqlite3,uiohook-napi",
+    "rebuild:native": "electron-rebuild -f -w better-sqlite3,uiohook-napi,robotjs",
     "rebuild:node": "npm rebuild better-sqlite3"
   },
   "dependencies": {
@@ -42,6 +42,7 @@
     "msw": "^2.13.5",
     "node-mic": "^1.0.1",
     "openai": "^6.34.0",
+    "robotjs": "^0.7.0",
     "uiohook-napi": "^1.5.5"
   },
   "devDependencies": {
