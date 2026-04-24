@@ -22,11 +22,26 @@ interface HistoryEntry {
   createdAt: number;
 }
 
+interface ModelProgress {
+  percent: number;
+  bytesWritten: number;
+  totalBytes: number;
+}
+
+interface PrivacyInfo {
+  provider: 'local' | 'groq' | 'none';
+  model?: string;
+}
+
 interface VoxFlowBridge {
   onStateChange(callback: (state: string) => void): void;
   onTranscription(callback: (text: string) => void): void;
   onError?(callback: (message: string) => void): void;
   onManualPaste?(callback: (text: string) => void): void;
+  onModelProgress?(callback: (p: ModelProgress) => void): void;
+  onModelReady?(callback: () => void): void;
+  onModelError?(callback: (msg: string) => void): void;
+  getPrivacyInfo?(): Promise<PrivacyInfo>;
   dictionary?: {
     list(): Promise<DictionaryEntry[]>;
     add(pattern: string, replacement: string, caseSensitive: boolean): Promise<DictionaryEntry>;
@@ -180,6 +195,53 @@ historySearchEl?.addEventListener('input', applySearch);
 // Refresh history when a new transcription lands so the list is always fresh.
 window.voxflow?.onStateChange((state) => {
   if (state === 'idle') void renderHistory();
+});
+
+// Privacy badge — reflects whether audio is staying local or being sent to Groq.
+const privacyBadgeEl = document.getElementById('privacy-badge');
+const privacyLabelEl = document.querySelector<HTMLElement>('.privacy-label');
+const privacyIconEl = document.querySelector<HTMLElement>('.privacy-icon');
+
+function paintPrivacy(info: PrivacyInfo): void {
+  if (!privacyBadgeEl || !privacyLabelEl || !privacyIconEl) return;
+  privacyBadgeEl.classList.remove('privacy-local', 'privacy-groq', 'privacy-none');
+  if (info.provider === 'local') {
+    privacyBadgeEl.classList.add('privacy-local');
+    privacyIconEl.textContent = '🔒';
+    privacyLabelEl.textContent = `Local · audio never leaves this machine${info.model ? ` (${info.model})` : ''}`;
+    privacyBadgeEl.title = 'Audio is transcribed on-device by whisper.cpp. No network calls.';
+  } else if (info.provider === 'groq') {
+    privacyBadgeEl.classList.add('privacy-groq');
+    privacyIconEl.textContent = '☁️';
+    privacyLabelEl.textContent = 'Cloud · audio sent to api.groq.com';
+    privacyBadgeEl.title = 'Audio is uploaded to Groq for transcription. Groq does not retain audio by default, but it does leave your machine.';
+  } else {
+    privacyBadgeEl.classList.add('privacy-none');
+    privacyIconEl.textContent = '⚠️';
+    privacyLabelEl.textContent = 'Dictation disabled';
+    privacyBadgeEl.title = 'No transcription provider is configured.';
+  }
+}
+
+void window.voxflow?.getPrivacyInfo?.().then(paintPrivacy);
+
+// First-launch model download — show progress in a dedicated panel, hide
+// status line until the model is ready. The pipeline will still accept a
+// hotkey but transcription is gated until the "model-ready" event fires.
+const modelDownloadEl = document.getElementById('model-download');
+const modelDownloadPercentEl = document.getElementById('model-download-percent');
+const modelDownloadFillEl = document.getElementById('model-download-fill');
+window.voxflow?.onModelProgress?.((p) => {
+  if (!modelDownloadEl) return;
+  modelDownloadEl.hidden = false;
+  if (modelDownloadPercentEl) modelDownloadPercentEl.textContent = `${p.percent}%`;
+  if (modelDownloadFillEl) modelDownloadFillEl.style.width = `${p.percent}%`;
+});
+window.voxflow?.onModelReady?.(() => {
+  if (modelDownloadEl) modelDownloadEl.hidden = true;
+});
+window.voxflow?.onModelError?.((msg) => {
+  if (statusEl) statusEl.textContent = `Model download failed: ${msg}`;
 });
 
 const settingsMount = document.getElementById('settings-dictionary');

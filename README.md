@@ -16,26 +16,30 @@
 
 | | **VoxFlow** | **Wispr Flow** |
 |---|---|---|
-| **Price** | Free forever (pay pennies per hour to Groq) | $15 / month |
-| **Data path** | Your audio → your Groq key → discarded | Their servers, their pipeline, their retention policy |
+| **Price** | Free forever | $15 / month |
+| **Audio path** | **Never leaves your machine** (local whisper.cpp) | Their servers |
 | **Your clipboard** | Preserved (restored after paste) | Varies |
 | **Transcription history** | Local SQLite on your machine | In their cloud |
 | **Source** | Open — fork it, hack it, own it | Closed |
 | **Hotkey** | Whatever you want (default: hold `⌥`) | Their choice |
 | **Dictionary / corrections** | Your own | Theirs |
 | **Lock-in** | None | Subscription |
+| **Network required** | No (offline after first-run model download) | Yes |
 
-It also *feels* snappier: no server round-trip for UI events, just local mic capture → Groq Whisper (which is genuinely fast) → in-process paste. Release Option, see your words. On my machine, end-to-end latency for a 2-second dictation is ~800 ms.
+VoxFlow runs OpenAI's Whisper model on your Mac via `whisper.cpp`. On an M4 Pro, a 2-5 second dictation transcribes in **150-600 ms** — often faster than cloud Whisper because there's no network round-trip. See [PRIVACY.md](./docs/PRIVACY.md) for the full data-flow inventory.
 
 ## Features
 
-- **Press-and-hold dictation** on the bare `⌥` key (Wispr-style) via an in-process `CGEventTap`. No modifier gymnastics.
+- **Fully local transcription** via `whisper.cpp` running OpenAI's Whisper model on-device. Nothing leaves your Mac. Offline-ready after first-run model download.
+- **Privacy indicator** in the popover: 🔒 Local (green) or ☁️ Cloud (orange). Always visible so you know where your audio is going.
+- **Press-and-hold dictation** on the bare `⌥` key (Wispr-style) via an in-process `CGEventTap`.
 - **Live audio waveform** in a floating pill at the bottom of the screen, only visible while you're talking.
 - **Auto-paste** at the cursor via an in-process `CGEventPost`, with your pre-dictation clipboard restored automatically after.
 - **Transcription history** in the menubar popover — the last 1000 entries, with live search, Copy, and Paste-again.
 - **Personal dictionary** for names and jargon. Add `Kaden` → `Kayden` once, it sticks forever.
-- **Optional LLM cleanup** via AWS Bedrock Haiku. Off by default (no AWS cost) — turn on in Settings.
 - **Repetition scrubber** for long dictations — Whisper's classic `"word word word"` hallucination is collapsed automatically.
+- **Optional cloud fallback**: Groq Whisper can be enabled as a fallback in `.env`; clearly labeled as cloud when active.
+- **Optional LLM cleanup** via AWS Bedrock Haiku. Off by default (no AWS cost).
 - **SQLite-backed everything** — your dictations, corrections, settings, dictionary all live in `~/Library/Application Support/VoxFlow/voxflow.sqlite`.
 
 ## Quick start
@@ -49,11 +53,13 @@ npm install
 # 2. System tool
 brew install sox            # node-mic shells out to sox/rec
 
-# 3. API key (free tier available)
-cp .env.example .env        # then fill in GROQ_API_KEY=gsk_…
+# 3. (optional) copy the env template — no keys needed for local mode
+cp .env.example .env
 
 # 4. Run in dev mode
 npm start
+# First launch downloads the Whisper model (~1.5 GB) — one-time,
+# shown with a progress bar in the popover.
 ```
 
 ## macOS permissions

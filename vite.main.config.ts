@@ -12,7 +12,15 @@ export default defineConfig({
       fileName: () => 'main.js',
     },
     rollupOptions: {
-      external: ['electron', 'better-sqlite3', 'node-mic', '@paymoapp/active-window', 'uiohook-napi', 'robotjs'],
+      external: [
+        'electron',
+        'better-sqlite3',
+        'node-mic',
+        '@paymoapp/active-window',
+        'uiohook-napi',
+        'robotjs',
+        'smart-whisper',
+      ],
     },
     commonjsOptions: {
       // dotenv / openai / aws-sdk ship CJS; bundle them.

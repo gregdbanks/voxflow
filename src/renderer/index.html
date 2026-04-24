@@ -21,7 +21,16 @@
         </nav>
       </header>
       <section class="panel-body" data-view="dictate">
+        <div id="privacy-badge" class="privacy-badge privacy-local" title="Audio stays on this machine">
+          <span class="privacy-icon">🔒</span>
+          <span class="privacy-label">Local · audio never leaves this machine</span>
+        </div>
         <p id="status">Hold <kbd>⌥</kbd> to dictate (or <kbd>⌘⌥Z</kbd>)</p>
+        <div id="model-download" class="model-download" hidden>
+          <p class="model-download-label">Downloading speech model… <span id="model-download-percent">0%</span></p>
+          <div class="model-download-track"><div id="model-download-fill" class="model-download-fill"></div></div>
+          <p class="model-download-hint">One-time download (~1.5 GB). Everything else already works.</p>
+        </div>
         <pre id="transcription" aria-live="polite"></pre>
       </section>
       <section class="panel-body" data-view="history" hidden>

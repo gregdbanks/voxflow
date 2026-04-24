@@ -23,6 +23,7 @@ const NATIVE_EXTERNAL_DEP_ROOTS = [
   'electron-squirrel-startup',
   'uiohook-napi',
   'robotjs',
+  'smart-whisper',
 ];
 
 function copyDirRecursive(src: string, dest: string): void {
