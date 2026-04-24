@@ -22,7 +22,32 @@ describe('TextInjector', () => {
       injected: 'hello from voxflow',
       previousClipboard: 'original clipboard',
       restored: true,
+      manualPasteRequired: false,
     });
+  });
+
+  it('falls back to manual-paste (keeps text on clipboard) when paste is denied', async () => {
+    const { AccessibilityPermissionError } = await import('../../../../src/platform/MacKeystroke.js');
+    const clipboard = new StubClipboard('original');
+    const keystroke = new StubKeystroke();
+    keystroke.sendPaste = async () => {
+      throw new AccessibilityPermissionError('keystroke denied');
+    };
+    const injector = new TextInjector({
+      clipboard,
+      keystroke,
+      pasteDelayMs: 0,
+      restoreDelayMs: 0,
+    });
+
+    const result = await injector.inject('hi there');
+
+    expect(result.manualPasteRequired).toBe(true);
+    expect(result.fallbackReason).toMatch(/denied/);
+    // The transcription is still on the clipboard — user will press ⌘V.
+    expect(clipboard.contents).toBe('hi there');
+    // We did NOT restore the previous clipboard, by design.
+    expect(clipboard.writes).toEqual(['hi there']);
   });
 
   it('orders paste strictly between write and restore', async () => {
