@@ -327,3 +327,23 @@ kbd {
   color: rgba(120,120,120,1);
   font-size: 12px;
 }
+
+.history-search {
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(0,0,0,0.12);
+  background: rgba(0,0,0,0.03);
+  color: inherit;
+  -webkit-appearance: none;
+  appearance: none;
+}
+@media (prefers-color-scheme: dark) {
+  .history-search { border-color: rgba(255,255,255,0.14); background: rgba(255,255,255,0.04); }
+}
+.history-search:focus {
+  outline: none;
+  border-color: rgba(0,122,255,0.6);
+}

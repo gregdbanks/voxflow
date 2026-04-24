@@ -188,10 +188,27 @@ app.whenReady().then(async () => {
     corrections = new CorrectionRepository(database);
     settings = new SettingsRepository(database);
   } catch (err) {
+    const e = err as Error;
+    try {
+      fs.appendFileSync(
+        DIAG_LOG,
+        `[${new Date().toISOString()}] DB INIT FAILED: ${e.message}\n`,
+      );
+    } catch {
+      // ignore
+    }
     logger.error(
       'Failed to open SQLite — run `npm run rebuild:native` or `npx @electron/rebuild -f -w better-sqlite3`',
       err,
     );
+  }
+  try {
+    fs.appendFileSync(
+      DIAG_LOG,
+      `[${new Date().toISOString()}] DB init ok=${database !== undefined}\n`,
+    );
+  } catch {
+    // ignore
   }
 
   const microphone = new MacMicrophone();
@@ -301,7 +318,19 @@ app.whenReady().then(async () => {
     dictionary,
     onEvent: (ev) => {
       if (ev.state === 'idle' && ev.text && ev.text.length > 0 && corrections) {
-        corrections.record(ev.text, ev.text, ev.activeApp ?? null);
+        try {
+          corrections.record(ev.text, ev.text, ev.activeApp ?? null);
+        } catch (err) {
+          const e = err as Error;
+          try {
+            fs.appendFileSync(
+              DIAG_LOG,
+              `[${new Date().toISOString()}] corrections.record failed: ${e.message}\n`,
+            );
+          } catch {
+            // ignore
+          }
+        }
       }
       onPipelineEvent(ev);
     },

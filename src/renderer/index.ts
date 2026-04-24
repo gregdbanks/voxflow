@@ -103,6 +103,11 @@ tabs.forEach((t) => {
 
 const historyListEl = document.getElementById('history-list') as HTMLUListElement | null;
 const historyEmptyEl = document.getElementById('history-empty') as HTMLParagraphElement | null;
+const historySearchEl = document.getElementById('history-search') as HTMLInputElement | null;
+
+// Keep a single cached copy and re-filter client-side so typing in the search
+// box doesn't hammer IPC / SQLite on every keystroke.
+let historyCache: HistoryEntry[] = [];
 
 function formatWhen(ts: number): string {
   const diff = Date.now() - ts;
@@ -114,9 +119,8 @@ function formatWhen(ts: number): string {
   return new Date(ts).toLocaleDateString();
 }
 
-async function renderHistory(): Promise<void> {
-  if (!historyListEl || !window.voxflow?.history) return;
-  const entries = await window.voxflow.history.list(25);
+function paintHistory(entries: HistoryEntry[]): void {
+  if (!historyListEl) return;
   historyListEl.innerHTML = '';
   if (entries.length === 0) {
     if (historyEmptyEl) historyEmptyEl.hidden = false;
@@ -155,6 +159,23 @@ async function renderHistory(): Promise<void> {
     historyListEl.append(li);
   }
 }
+
+function applySearch(): void {
+  const q = (historySearchEl?.value ?? '').trim().toLowerCase();
+  if (!q) {
+    paintHistory(historyCache);
+    return;
+  }
+  paintHistory(historyCache.filter((e) => e.corrected.toLowerCase().includes(q)));
+}
+
+async function renderHistory(): Promise<void> {
+  if (!historyListEl || !window.voxflow?.history) return;
+  historyCache = (await window.voxflow.history.list(1000)) as HistoryEntry[];
+  applySearch();
+}
+
+historySearchEl?.addEventListener('input', applySearch);
 
 // Refresh history when a new transcription lands so the list is always fresh.
 window.voxflow?.onStateChange((state) => {
