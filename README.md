@@ -12,6 +12,15 @@
 
 ---
 
+## Highlights
+
+- 🔒 **Fully local by default.** OpenAI's Whisper runs on your Mac via `whisper.cpp`. Audio never leaves the machine.
+- 🆓 **Free forever.** No subscription, no API key required, no vendor lock-in.
+- ⚡ **Fast.** ~500 ms-2 s per dictation on an M4 Pro with Metal. Often faster than cloud.
+- 🎛️ **Press-and-hold on bare `⌥`** (Wispr-style), auto-pastes at your cursor, preserves your clipboard.
+- 📜 **Your own history + dictionary** in a local SQLite file you can inspect, export, or delete.
+- 👁️ **Clear data-flow indicator** in the popover: 🔒 Local or ☁️ Cloud — you always know where your audio is going.
+
 ## Why VoxFlow instead of Wispr Flow?
 
 | | **VoxFlow** | **Wispr Flow** |
@@ -74,6 +83,64 @@ VoxFlow needs two system grants on first launch:
 macOS TCC (the permission database) keys grants to the exact cdhash of the binary that was granted. Every rebuild changes the cdhash, which means the old grant is technically attached to a "different" binary and the new one looks unknown. This is annoying but *not a bug*: grants stick forever for any build you don't rebuild, and **with an Apple Developer ID signature ($99/yr), grants stick across all builds because TCC tracks by cert identity, not hash.**
 
 VoxFlow ad-hoc signs the bundle with a stable identifier (`com.voxflow.app`) to minimise this for casual development, but rebuilds will still require a re-grant until you pay Apple. See [Apple Developer limitations](#apple-developer-limitations) below.
+
+## Take VoxFlow to another Mac
+
+Two paths — pick based on how much you want to build from source.
+
+### Option A — Clone and build (recommended for a second development machine)
+
+Requires: Apple Silicon Mac, recent Node (18+), Xcode Command Line Tools, `brew`.
+
+```bash
+# Xcode CLT + Node if you don't already have them
+xcode-select --install
+# (install Node however you like — nvm, fnm, Homebrew, installer)
+
+# VoxFlow itself
+git clone https://github.com/gregdbanks/voxflow.git
+cd voxflow
+brew install sox
+npm install            # rebuilds native deps for your Node
+npm start              # dev mode — auto-rebuilds natives for Electron
+```
+
+On first dictation the app downloads the Whisper model (~1.5 GB from Hugging Face) — one-time, shown with a progress bar. Grant mic + Accessibility when macOS prompts.
+
+For a production-style install:
+
+```bash
+npm run package
+cp -R out/VoxFlow-darwin-arm64/VoxFlow.app /Applications/
+open /Applications/VoxFlow.app
+```
+
+### Option B — Copy the packaged `.app` to another Mac
+
+Faster, skips the toolchain setup. Caveats:
+
+- The `.app` only works on the same CPU architecture it was built on (arm64 → arm64).
+- If you built it locally with a `.env` containing a Groq key, that key travels inside the bundle. **Strip it before copying:**
+
+  ```bash
+  rm /Applications/VoxFlow.app/Contents/Resources/.env
+  ```
+
+- macOS will show "unidentified developer" warnings because it's ad-hoc signed. Right-click → Open → Open once to allow.
+- The Whisper model lives in `~/Library/Application Support/VoxFlow/models/` on each machine. First launch on the new Mac re-downloads it (~1.5 GB).
+- Mic + Accessibility grants don't travel across machines. Grant them on each Mac.
+
+```bash
+# From the build machine
+tar -czf voxflow.tgz -C out/VoxFlow-darwin-arm64 VoxFlow.app
+# transfer voxflow.tgz → unpack on the other Mac:
+tar -xzf voxflow.tgz -C /Applications/
+```
+
+### What you can't do (today)
+
+- **Sync history/dictionary between Macs**: the SQLite file is local and there's no iCloud/Dropbox shim. Copy `~/Library/Application Support/VoxFlow/voxflow.sqlite` manually if you want to mirror state. (PRs welcome.)
+- **Single click install for non-developer friends**: you'd need a notarized, signed build (Apple Developer Program, $99/yr). The current build will work, but Gatekeeper warnings apply.
 
 ## Architecture
 
