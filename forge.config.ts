@@ -61,7 +61,13 @@ const config: ForgeConfig = {
       // Unpack native bindings out of app.asar so `require('better-sqlite3')`
       // etc. can dlopen their .node files at runtime — dlopen can't read
       // files from inside an asar archive.
-      unpack: '**/{*.node,better-sqlite3,node-mic,@paymoapp/active-window}/**',
+      // smart-whisper ships Metal shader source (ggml-metal.metal) that
+      // whisper.cpp loads at runtime for GPU acceleration. Metal's shader
+      // loader is a native API that can't read from inside app.asar, so
+      // the whole smart-whisper tree has to live on the real filesystem
+      // alongside the .node binary. Without this unpack, transcription
+      // silently falls back to CPU and is ~5x slower.
+      unpack: '**/{*.node,better-sqlite3,node-mic,@paymoapp/active-window,smart-whisper}/**',
     },
     name: 'VoxFlow',
     // NOTE: `.env` is shipped into Resources/ so the packaged main process

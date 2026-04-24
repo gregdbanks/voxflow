@@ -9,6 +9,16 @@ import path from 'node:path';
 // prepend, dictation dies at pipeline.begin() with "sox is not installed".
 process.env.PATH = `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH ?? ''}`;
 
+// Tell whisper.cpp / smart-whisper where to find its Metal shader file. In a
+// packaged Electron app, the file ships inside app.asar.unpacked because
+// Metal's native shader loader can't read from inside an asar archive —
+// and smart-whisper's default path points into app.asar, so without this
+// override transcription silently falls back to CPU and runs ~5x slower.
+if (app.isPackaged) {
+  const unpackedRoot = app.getAppPath().replace(/\/app\.asar$/, '/app.asar.unpacked');
+  process.env.GGML_METAL_PATH_RESOURCES = `${unpackedRoot}/node_modules/smart-whisper/whisper.cpp/ggml/src`;
+}
+
 // Bypass-console diagnostics: when running the packaged .app, electron's
 // internal logging can swallow console.log unless ELECTRON_ENABLE_LOGGING is
 // set. Writing to a file sidesteps that and gives us a crash trail.
