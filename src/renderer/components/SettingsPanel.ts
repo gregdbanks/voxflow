@@ -7,7 +7,6 @@ interface DictionaryEntry {
 }
 
 interface AppSettings {
-  cleanupEnabled: boolean;
   hotkey: string;
   language: string;
 }
@@ -32,16 +31,6 @@ export interface MountOptions {
 export function mountSettingsPanel({ container, dictionary, settings }: MountOptions): void {
   container.innerHTML = `
     <section class="settings-section">
-      <h3 class="settings-subheading">AI Cleanup</h3>
-      <label class="toggle-row">
-        <input type="checkbox" id="cleanup-toggle" />
-        <span class="toggle-text">
-          <span class="toggle-title">Clean transcriptions with Claude Haiku</span>
-          <span class="toggle-hint">Removes fillers, fixes grammar, and adapts to the active app.</span>
-        </span>
-      </label>
-    </section>
-    <section class="settings-section">
       <h3 class="settings-subheading">Personal Dictionary</h3>
       <form class="dict-form" autocomplete="off">
         <div class="dict-form-row">
@@ -60,21 +49,10 @@ export function mountSettingsPanel({ container, dictionary, settings }: MountOpt
     </section>
   `;
 
-  const cleanupToggle = container.querySelector<HTMLInputElement>('#cleanup-toggle')!;
   const form = container.querySelector<HTMLFormElement>('.dict-form')!;
   const list = container.querySelector<HTMLUListElement>('.dict-list')!;
   const empty = container.querySelector<HTMLParagraphElement>('.dict-empty')!;
-
-  if (settings) {
-    void settings.get().then((s) => {
-      cleanupToggle.checked = s.cleanupEnabled;
-    });
-    cleanupToggle.addEventListener('change', () => {
-      void settings.update({ cleanupEnabled: cleanupToggle.checked });
-    });
-  } else {
-    cleanupToggle.disabled = true;
-  }
+  void settings; // reserved for future hotkey/language editing
 
   if (!dictionary) {
     form.innerHTML = '<p class="dict-unavailable">Dictionary bridge unavailable.</p>';

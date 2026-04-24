@@ -37,15 +37,6 @@ export interface ITranscriptionService {
   transcribe(request: TranscriptionRequest): Promise<TranscriptionResult>;
 }
 
-export interface CleanupRequest {
-  text: string;
-  activeApp?: string;
-}
-
-export interface ICleanupService {
-  clean(request: CleanupRequest): Promise<string>;
-}
-
 export interface DictionaryEntry {
   id: number;
   pattern: string;
@@ -75,7 +66,6 @@ export interface ICorrectionRepository {
 }
 
 export interface AppSettings {
-  cleanupEnabled: boolean;
   hotkey: string;
   language: string;
 }

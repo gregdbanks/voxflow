@@ -11,15 +11,13 @@ function fresh() {
 describe('SettingsRepository', () => {
   it('returns the seeded defaults', () => {
     const settings = fresh().get();
-    expect(settings.cleanupEnabled).toBe(true);
     expect(settings.hotkey).toBe('Command+Alt+Z');
     expect(settings.language).toBe('auto');
   });
 
   it('merges partial updates and round-trips', () => {
     const repo = fresh();
-    const after = repo.update({ cleanupEnabled: false, language: 'en' });
-    expect(after.cleanupEnabled).toBe(false);
+    const after = repo.update({ language: 'en' });
     expect(after.language).toBe('en');
     expect(after.hotkey).toBe('Command+Alt+Z');
 

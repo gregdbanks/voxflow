@@ -47,8 +47,7 @@ import { loadConfig } from '../shared/config.js';
 
 // Load .env from the project root in dev, or from the app resources dir when
 // packaged. Electron Forge doesn't auto-load .env files — without this, the
-// main process sees neither GROQ_API_KEY nor AWS_* and silently falls back
-// to the no-op transcription service.
+// optional GROQ_API_KEY cloud fallback won't be wired up at startup.
 for (const candidate of [
   path.resolve(process.cwd(), '.env'),
   path.join(app.getAppPath(), '.env'),
@@ -65,7 +64,6 @@ import { PillWindow } from './pill.js';
 import { AudioRecorder } from '../services/audio/AudioRecorder.js';
 import { MacMicrophone } from '../platform/MacMicrophone.js';
 import { GroqTranscriptionService } from '../services/transcription/TranscriptionService.js';
-import { TextCleanupService } from '../services/llm/TextCleanupService.js';
 import {
   DictationPipeline,
   type PipelineEvent,
@@ -91,7 +89,7 @@ const logger = createLogger({ level: config.logLevel });
 try {
   fs.appendFileSync(
     DIAG_LOG,
-    `[${new Date().toISOString()}] config loaded; groqKey=${config.groqApiKey ? 'set' : 'MISSING'} awsKey=${config.awsAccessKeyId ? 'set' : 'unset'} awsRegion=${config.awsRegion}\n`,
+    `[${new Date().toISOString()}] config loaded; provider=${config.transcriptionProvider} model=${config.whisperModel} groqKey=${config.groqApiKey ? 'set' : 'unset'}\n`,
   );
 } catch {
   // ignore
@@ -123,7 +121,6 @@ const STATE_TO_TRAY: Record<PipelineState, TrayState> = {
   idle: 'idle',
   recording: 'recording',
   transcribing: 'transcribing',
-  cleaning: 'cleaning',
   injecting: 'injecting',
   error: 'error',
 };
@@ -413,24 +410,11 @@ app.whenReady().then(async () => {
       broadcast(mb, 'voxflow:error', ev.error.message);
     }
   };
-  // Always create the cleanup service — the AWS SDK's default credential
-  // chain picks up ~/.aws/credentials, IAM role, SSO, etc. We only pass
-  // explicit keys if they're in env (e.g. .env). If neither works, the
-  // first cleanup call will fail and the pipeline falls back to raw text.
-  const cleanup = new TextCleanupService({
-    region: config.awsRegion,
-    accessKeyId: config.awsAccessKeyId,
-    secretAccessKey: config.awsSecretAccessKey,
-  });
-  logger.info('Bedrock cleanup service enabled');
-
   const pipeline = new DictationPipeline({
     recorder,
     transcription,
     injector,
     activeWindow,
-    cleanup,
-    isCleanupEnabled: () => settings?.get().cleanupEnabled ?? true,
     dictionary,
     onEvent: (ev) => {
       if (ev.state === 'idle' && ev.text && ev.text.length > 0 && corrections) {

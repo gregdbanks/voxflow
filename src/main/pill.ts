@@ -107,7 +107,7 @@ export class PillWindow {
   update(state: PipelineState): void {
     if (!this.win || this.win.isDestroyed()) return;
     // Pill now exists only to show live audio levels while recording.
-    // Any other state (idle, transcribing, cleaning, injecting, error)
+    // Any other state (idle, transcribing, injecting, error)
     // hides it — we don't need a floating indicator for post-recording
     // work, and it would just be a dark empty pill anyway.
     const show = state === 'recording';

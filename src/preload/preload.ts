@@ -9,7 +9,6 @@ interface DictionaryEntry {
 }
 
 interface AppSettings {
-  cleanupEnabled: boolean;
   hotkey: string;
   language: string;
 }

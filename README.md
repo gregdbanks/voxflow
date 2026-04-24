@@ -48,7 +48,6 @@ VoxFlow runs OpenAI's Whisper model on your Mac via `whisper.cpp`. On an M4 Pro,
 - **Personal dictionary** for names and jargon. Add `Kaden` → `Kayden` once, it sticks forever.
 - **Repetition scrubber** for long dictations — Whisper's classic `"word word word"` hallucination is collapsed automatically.
 - **Optional cloud fallback**: Groq Whisper can be enabled as a fallback in `.env`; clearly labeled as cloud when active.
-- **Optional LLM cleanup** via AWS Bedrock Haiku. Off by default (no AWS cost).
 - **SQLite-backed everything** — your dictations, corrections, settings, dictionary all live in `~/Library/Application Support/VoxFlow/voxflow.sqlite`.
 
 ## Quick start
@@ -177,13 +176,10 @@ test/
           hold ⌥                  release ⌥
 idle  ──────────────► recording ──────────────► transcribing
                           │                         │
-                          │ (tray or /stop)         ▼
-                          │                      cleaning (optional Bedrock)
+                          │ (cancel)                ▼
+                          │                     injecting
                           ▼                         │
                         idle                        ▼
-                                                injecting
-                                                    │
-                                                    ▼
                                                   idle
 ```
 
@@ -197,8 +193,8 @@ Every state transition emits a `PipelineEvent`. The tray title, floating pill, a
 | Hotkey | `uiohook-napi` | In-process `CGEventTap`, detects bare `⌥` hold/release |
 | Paste | `robotjs` | In-process `CGEventPost`, avoids the unsigned-subprocess TCC hole |
 | Mic | `node-mic` (+ Homebrew `sox`) | Cheap, scriptable PCM capture |
-| Transcription | [Groq](https://groq.com) Whisper v3 via OpenAI SDK | Fast, cheap, great accuracy |
-| Cleanup (opt) | AWS Bedrock Haiku | Punctuation & grammar when you want it |
+| Transcription (default) | `whisper.cpp` via `smart-whisper` | On-device Whisper, Metal-accelerated on Apple Silicon |
+| Transcription (fallback) | [Groq](https://groq.com) Whisper v3 via OpenAI SDK | Opt-in cloud path |
 | Storage | `better-sqlite3` | Local, synchronous, zero-deps |
 | Window UI | Vanilla HTML + vite | No framework weight for a 400-px popover |
 | Tests | `vitest` + `msw` + Playwright | Unit / mocked-network / e2e |
