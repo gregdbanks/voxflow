@@ -70,6 +70,10 @@ const config: ForgeConfig = {
       unpack: '**/{*.node,better-sqlite3,node-mic,@paymoapp/active-window,smart-whisper}/**',
     },
     name: 'VoxFlow',
+    // Dock / Finder / Cmd+Tab icon — rendered from assets/logo.svg via
+    // iconutil into an .icns bundle (Apple's multi-resolution icon format).
+    // Forge auto-appends the extension.
+    icon: './assets/icon',
     // VoxFlow is fully local — no secrets to ship. The .env file used
     // to be baked into Resources/ so dotenv could pick up GROQ_API_KEY /
     // AWS_* in the packaged app; with Groq and Bedrock gone, we don't

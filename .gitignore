@@ -13,3 +13,4 @@ playwright-report/
 playwright/.cache/
 main.js
 native/build/
+assets/icon.iconset/

@@ -11,17 +11,17 @@ VoxFlow runs entirely on your Mac. There is no cloud component, no account, no A
 
 ## Data flow inventory
 
-| Component | Where it runs | Network? |
+| Component | Where it runs | Leaves your Mac? |
 |---|---|---|
-| Microphone capture | Your Mac, via `node-mic` + Homebrew `sox` | ❌ |
-| Speech-to-text | Your Mac, in-process via `whisper.cpp` (`smart-whisper` bindings) with Metal/Neural Engine acceleration | ❌ |
-| Hotkey detection | Your Mac, in-process `CGEventTap` (`uiohook-napi`) | ❌ |
-| Auto-paste (`⌘V`) | Your Mac, in-process `CGEventPost` (`robotjs`) | ❌ |
-| Transcription history | Local SQLite file | ❌ |
-| Personal dictionary | Local SQLite file | ❌ |
-| Settings | Local SQLite file | ❌ |
-| Repetition scrubbing | Local JS (`collapseRepeats`) | ❌ |
-| Diagnostic log | Local file at `/tmp/voxflow-diag.log` | ❌ |
+| Microphone capture | Your Mac, via `node-mic` + Homebrew `sox` | **No** |
+| Speech-to-text | Your Mac, in-process via `whisper.cpp` (`smart-whisper` bindings) with Metal/Neural Engine acceleration | **No** |
+| Hotkey detection | Your Mac, in-process `CGEventTap` (`uiohook-napi`) | **No** |
+| Auto-paste (`⌘V`) | Your Mac, in-process `CGEventPost` (`robotjs`) | **No** |
+| Transcription history | Local SQLite file | **No** |
+| Personal dictionary | Local SQLite file | **No** |
+| Settings | Local SQLite file | **No** |
+| Repetition scrubbing | Local JS (`collapseRepeats`) | **No** |
+| Diagnostic log | Local file at `/tmp/voxflow-diag.log` | **No** |
 
 ## The one network call
 
