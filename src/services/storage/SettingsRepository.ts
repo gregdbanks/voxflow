@@ -4,6 +4,7 @@ import type { AppSettings, ISettingsRepository } from '../../platform/interfaces
 const DEFAULTS: AppSettings = {
   hotkey: 'Command+Alt+Z',
   language: 'auto',
+  whisperModel: 'large-v3-turbo',
 };
 
 interface Row {
@@ -14,6 +15,7 @@ interface Row {
 const KEY_MAP: Record<keyof AppSettings, string> = {
   hotkey: 'hotkey',
   language: 'language',
+  whisperModel: 'whisper_model',
 };
 
 export class SettingsRepository implements ISettingsRepository {
@@ -27,6 +29,7 @@ export class SettingsRepository implements ISettingsRepository {
     return {
       hotkey: byKey.get(KEY_MAP.hotkey) ?? DEFAULTS.hotkey,
       language: byKey.get(KEY_MAP.language) ?? DEFAULTS.language,
+      whisperModel: byKey.get(KEY_MAP.whisperModel) ?? DEFAULTS.whisperModel,
     };
   }
 
