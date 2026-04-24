@@ -1,5 +1,9 @@
 import { defineConfig } from 'vite';
 
+// Inline every JS-only dependency into main.js. Only truly native modules
+// (or ones that electron requires to be external) stay external; those need
+// to be reachable at runtime via node_modules unpacked alongside app.asar —
+// see forge.config.ts's `asar.unpack` setting.
 export default defineConfig({
   build: {
     lib: {
@@ -8,15 +12,11 @@ export default defineConfig({
       fileName: () => 'main.js',
     },
     rollupOptions: {
-      external: [
-        'electron',
-        'menubar',
-        'node-mic',
-        'better-sqlite3',
-        'clipboardy',
-        '@paymoapp/active-window',
-        'openai',
-      ],
+      external: ['electron', 'better-sqlite3', 'node-mic', '@paymoapp/active-window'],
+    },
+    commonjsOptions: {
+      // dotenv / openai / aws-sdk ship CJS; bundle them.
+      transformMixedEsModules: true,
     },
   },
 });

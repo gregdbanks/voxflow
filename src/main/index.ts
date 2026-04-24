@@ -3,6 +3,30 @@ import { menubar } from 'menubar';
 import dotenv from 'dotenv';
 import fs from 'node:fs';
 import path from 'node:path';
+
+// Bypass-console diagnostics: when running the packaged .app, electron's
+// internal logging can swallow console.log unless ELECTRON_ENABLE_LOGGING is
+// set. Writing to a file sidesteps that and gives us a crash trail.
+const DIAG_LOG = '/tmp/voxflow-diag.log';
+try {
+  fs.appendFileSync(DIAG_LOG, `[${new Date().toISOString()}] main.ts loaded (pid=${process.pid})\n`);
+} catch {
+  // Best effort only.
+}
+process.on('uncaughtException', (err) => {
+  try {
+    fs.appendFileSync(DIAG_LOG, `UNCAUGHT: ${err.stack ?? err.message}\n`);
+  } catch {
+    // ignore
+  }
+});
+process.on('unhandledRejection', (reason) => {
+  try {
+    fs.appendFileSync(DIAG_LOG, `UNHANDLED: ${String(reason)}\n`);
+  } catch {
+    // ignore
+  }
+});
 import url from 'node:url';
 import { loadConfig } from '../shared/config.js';
 
@@ -189,17 +213,16 @@ app.whenReady().then(() => {
       broadcast(mb, 'voxflow:error', ev.error.message);
     }
   };
-  let cleanup: TextCleanupService | undefined;
-  if (config.awsAccessKeyId && config.awsSecretAccessKey) {
-    cleanup = new TextCleanupService({
-      region: config.awsRegion,
-      accessKeyId: config.awsAccessKeyId,
-      secretAccessKey: config.awsSecretAccessKey,
-    });
-    logger.info('Bedrock cleanup service enabled');
-  } else {
-    logger.info('AWS credentials not set — skipping Bedrock cleanup');
-  }
+  // Always create the cleanup service — the AWS SDK's default credential
+  // chain picks up ~/.aws/credentials, IAM role, SSO, etc. We only pass
+  // explicit keys if they're in env (e.g. .env). If neither works, the
+  // first cleanup call will fail and the pipeline falls back to raw text.
+  const cleanup = new TextCleanupService({
+    region: config.awsRegion,
+    accessKeyId: config.awsAccessKeyId,
+    secretAccessKey: config.awsSecretAccessKey,
+  });
+  logger.info('Bedrock cleanup service enabled');
 
   const pipeline = new DictationPipeline({
     recorder,
