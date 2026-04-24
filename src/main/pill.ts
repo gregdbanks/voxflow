@@ -1,9 +1,10 @@
 import { BrowserWindow, screen } from 'electron';
 import type { PipelineState } from '../services/pipeline/DictationPipeline.js';
 
-const PILL_WIDTH = 220;
-const PILL_HEIGHT = 48;
+const PILL_WIDTH = 180;
+const PILL_HEIGHT = 44;
 const BOTTOM_INSET = 80;
+const BAR_COUNT = 24;
 
 // Always-on-top floating pill near the bottom of the screen so the user can
 // see dictation state without looking at the menu bar (the ● title is easy to
@@ -53,76 +54,43 @@ export class PillWindow {
   }
 
   private html(): string {
+    // Minimal: only oscillating waveform bars, nothing else. No label, no
+    // state dot, no stop button. Pill is shown only while the pipeline is
+    // recording; users cancel by releasing Option, not by clicking.
+    const bars = Array.from({ length: BAR_COUNT }, () => '<div class="bar"></div>').join('');
     const body = `<!doctype html>
 <html><head><meta charset="UTF-8"><style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { background: transparent; height: 100%; overflow: hidden; user-select: none; font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: #fff; }
-  .pill { display: flex; align-items: center; gap: 10px; background: rgba(20,20,20,0.92); border: 1px solid rgba(255,255,255,0.08); border-radius: 24px; padding: 0 18px; height: 48px; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
-  .dot { width: 10px; height: 10px; border-radius: 50%; background: #888; flex: 0 0 auto; }
-  .dot.recording { background: #ff3b30; animation: pulse 1s ease-in-out infinite; }
-  .dot.transcribing, .dot.cleaning, .dot.injecting { background: #fbbc04; }
-  .dot.error { background: #ff3b30; }
-  @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1);} 50% { opacity: .35; transform: scale(.7);} }
-  .label { font-size: 13px; font-weight: 500; letter-spacing: .2px; white-space: nowrap; }
-  .bars { display: none; align-items: center; gap: 3px; height: 24px; margin-left: auto; }
-  .bars.show { display: flex; }
-  .bar { width: 3px; height: 4px; background: #ff3b30; border-radius: 2px; transition: height 80ms ease-out; }
-  .stop { margin-left: 6px; width: 22px; height: 22px; border-radius: 50%; border: 0; background: rgba(255,255,255,0.1); color: #fff; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1; }
-  .stop:hover { background: rgba(255,59,48,0.8); }
+  html, body { background: transparent; height: 100%; overflow: hidden; user-select: none; -webkit-app-region: no-drag; }
+  .pill { display: flex; align-items: center; justify-content: space-between; gap: 2px; background: rgba(20,20,20,0.92); border: 1px solid rgba(255,255,255,0.08); border-radius: 22px; padding: 0 14px; height: 44px; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+  .bar { width: 3px; height: 3px; background: #ff3b30; border-radius: 2px; transition: height 90ms ease-out; flex: 0 0 auto; }
 </style></head><body>
-<div class="pill">
-  <div class="dot" id="dot"></div>
-  <div class="label" id="label">Listening…</div>
-  <div class="bars" id="bars">
-    <div class="bar"></div><div class="bar"></div><div class="bar"></div>
-    <div class="bar"></div><div class="bar"></div>
-  </div>
-  <button class="stop" id="stop" title="Cancel">✕</button>
-</div>
+<div class="pill">${bars}</div>
 <script>
   const { ipcRenderer } = require('electron');
-  const dot = document.getElementById('dot');
-  const label = document.getElementById('label');
-  const bars = document.getElementById('bars');
-  const barEls = bars.querySelectorAll('.bar');
-  const LABELS = { recording: 'Listening…', transcribing: 'Transcribing…', cleaning: 'Cleaning up…', injecting: 'Pasting…', error: 'Error' };
-
-  // Keep per-bar recent-peak history so the middle bars feel more alive.
-  const levels = [0, 0, 0, 0, 0];
-
-  document.getElementById('stop').addEventListener('click', () => {
-    ipcRenderer.invoke('voxflow:stop');
-  });
+  const barEls = document.querySelectorAll('.bar');
+  const BAR_COUNT = ${BAR_COUNT};
+  const levels = new Array(BAR_COUNT).fill(0);
 
   ipcRenderer.on('pill:state', (_, state) => {
-    dot.className = 'dot ' + state;
-    label.textContent = LABELS[state] || '';
-    if (state === 'recording') {
-      bars.classList.add('show');
-    } else {
-      bars.classList.remove('show');
-      for (const b of barEls) b.style.height = '4px';
+    // Reset heights when the pill becomes visible/invisible so the next
+    // recording doesn't inherit the last session's waveform peaks.
+    if (state !== 'recording') {
+      levels.fill(0);
+      for (const b of barEls) b.style.height = '3px';
     }
   });
 
-  let levelCount = 0;
-  let peak = 0;
   ipcRenderer.on('pill:level', (_, level) => {
-    levelCount++;
-    peak = Math.max(peak, level);
-    // Shift levels left; newest on the right. 5 bars = a mini live waveform.
     levels.shift();
     levels.push(level);
-    // Aggressive scaling: normal speech RMS hovers around 0.02-0.10, so we
-    // multiply by 8 (was 4) and square-root for a softer ceiling.
+    // Amplify + sqrt curve so normal speech RMS (~0.02-0.10) clearly moves
+    // the bars. Max height 28px (fits in the 44px-high pill with padding).
     for (let i = 0; i < barEls.length; i++) {
-      const v = Math.min(1, Math.sqrt(levels[i] * 8));
-      const h = Math.max(4, Math.round(v * 24));
+      const v = Math.min(1, Math.sqrt(levels[i] * 12));
+      const h = Math.max(3, Math.round(v * 28));
       barEls[i].style.height = h + 'px';
     }
-    // Debug readout in the label so we can see if levels are actually
-    // arriving when the bars look static.
-    label.textContent = 'Listening… ' + levelCount + ' · peak ' + peak.toFixed(3);
   });
 </script></body></html>`;
     return 'data:text/html;charset=utf-8,' + encodeURIComponent(body);
@@ -138,13 +106,18 @@ export class PillWindow {
 
   update(state: PipelineState): void {
     if (!this.win || this.win.isDestroyed()) return;
-    const show = state !== 'idle';
+    // Pill now exists only to show live audio levels while recording.
+    // Any other state (idle, transcribing, cleaning, injecting, error)
+    // hides it — we don't need a floating indicator for post-recording
+    // work, and it would just be a dark empty pill anyway.
+    const show = state === 'recording';
     if (show) {
       const send = (): void => this.win!.webContents.send('pill:state', state);
       if (this.loaded) send();
       else this.win.webContents.once('did-finish-load', send);
       if (!this.win.isVisible()) this.win.showInactive();
     } else if (this.win.isVisible()) {
+      this.win.webContents.send('pill:state', state);
       this.win.hide();
     }
   }

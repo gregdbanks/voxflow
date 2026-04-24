@@ -3,7 +3,7 @@ import { TextInjector } from '../../../../src/services/injection/TextInjector.js
 import { StubClipboard, StubKeystroke } from '../../../helpers/platform-stubs.js';
 
 describe('TextInjector', () => {
-  it('writes text, pastes, and leaves the transcription on the clipboard', async () => {
+  it('writes text, pastes, and restores the original clipboard', async () => {
     const clipboard = new StubClipboard('original clipboard');
     const keystroke = new StubKeystroke();
     const injector = new TextInjector({
@@ -15,15 +15,13 @@ describe('TextInjector', () => {
 
     const result = await injector.inject('hello from voxflow');
 
-    // Transcription stays on the clipboard by design — async CGEvent paste
-    // can race with a restore write, and leaving it lets the user ⌘V again.
-    expect(clipboard.writes).toEqual(['hello from voxflow']);
+    expect(clipboard.writes).toEqual(['hello from voxflow', 'original clipboard']);
     expect(keystroke.pasteCalls).toBe(1);
-    expect(clipboard.contents).toBe('hello from voxflow');
+    expect(clipboard.contents).toBe('original clipboard');
     expect(result).toMatchObject({
       injected: 'hello from voxflow',
       previousClipboard: 'original clipboard',
-      restored: false,
+      restored: true,
       manualPasteRequired: false,
     });
   });
@@ -73,7 +71,7 @@ describe('TextInjector', () => {
       restoreDelayMs: 0,
     });
     await injector.inject('voxflow');
-    expect(events).toEqual(['write:voxflo', 'paste']);
+    expect(events).toEqual(['write:voxflo', 'paste', 'write:']);
   });
 
   it('survives a clipboard read failure and still injects', async () => {

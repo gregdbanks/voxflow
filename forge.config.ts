@@ -22,6 +22,7 @@ const NATIVE_EXTERNAL_DEP_ROOTS = [
   '@paymoapp/active-window',
   'electron-squirrel-startup',
   'uiohook-napi',
+  'robotjs',
 ];
 
 function copyDirRecursive(src: string, dest: string): void {

@@ -132,9 +132,7 @@ describe('DictationPipeline', () => {
     await pipeline.finish();
     expect(events.map((e) => e.state)).toEqual(['recording', 'transcribing', 'injecting', 'idle']);
     expect(keystroke.pasteCalls).toBe(1);
-    // TextInjector no longer restores the original clipboard — see
-    // src/services/injection/TextInjector.ts for the rationale.
-    expect(clipboard.writes).toEqual(['hello there']);
+    expect(clipboard.writes).toEqual(['hello there', 'original']);
     expect(events.at(-1)).toMatchObject({ state: 'idle', text: 'hello there', app: 'TextEdit' });
   });
 

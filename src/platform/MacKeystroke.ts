@@ -8,18 +8,23 @@ export class AccessibilityPermissionError extends Error {
 }
 
 /**
- * macOS keystroke port. We've been through osascript (-1743 Automation
- * denials) and a CGEventPost helper binary (unsigned subprocess Accessibility
- * is unreliable — toggles show "on" but AXIsProcessTrusted returns false).
- * Without a real Apple Developer ID signature, auto-paste is not
- * dependable, so this class now short-circuits: TextInjector writes the
- * transcription to the clipboard, and the user pastes with ⌘V. That matches
- * Wispr Flow's behaviour in manual-paste mode and is perfectly reliable.
+ * macOS keystroke port. Posts ⌘V via robotjs, which calls CGEventPost
+ * IN-PROCESS from the Electron main — so it inherits VoxFlow.app's
+ * Accessibility grant rather than needing a separate grant for a helper
+ * binary (the unsigned-subprocess TCC hole that killed our earlier
+ * paste-helper attempts). If robotjs fails to load on any given platform,
+ * we fall back to the clipboard-only path.
  */
 export class MacKeystroke implements IKeystroke {
   async sendPaste(): Promise<void> {
-    throw new AccessibilityPermissionError(
-      'Auto-paste disabled — transcription is on the clipboard; press ⌘V to paste.',
-    );
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const robot = require('robotjs') as { keyTap: (key: string, modifier?: string | string[]) => void };
+      robot.keyTap('v', 'command');
+    } catch (err) {
+      throw new AccessibilityPermissionError(
+        `Auto-paste failed (${(err as Error).message}). Transcription is on the clipboard; press ⌘V.`,
+      );
+    }
   }
 }
