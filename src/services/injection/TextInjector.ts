@@ -54,7 +54,13 @@ export class TextInjector {
 
     await this.clipboard.write(text);
     await this.sleep(this.pasteDelayMs);
-    await this.keystroke.sendPaste();
+    try {
+      await this.keystroke.sendPaste();
+    } catch (err) {
+      // Leave the text on the clipboard so the user can ⌘V manually while
+      // the permission issue is being resolved. Surface the original error.
+      throw err;
+    }
     await this.sleep(this.restoreDelayMs);
 
     let restored = false;
