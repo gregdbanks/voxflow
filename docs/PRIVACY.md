@@ -1,67 +1,73 @@
-# Privacy — what does and doesn't leave your machine
+# Privacy
 
-VoxFlow is designed to be a **local-first** dictation app. By default, nothing you say leaves your computer. This document is a plain-English inventory of every component that could touch the network so you can verify that yourself.
+VoxFlow runs entirely on your Mac. There is no cloud component, no account, no API key. No audio you dictate is ever transmitted anywhere. Full stop.
 
 ## TL;DR
 
-With the default settings, **zero bytes of audio or transcription data leave your Mac**. VoxFlow runs a copy of OpenAI's Whisper model locally via `whisper.cpp`, and all history, settings, and dictionary entries live in a SQLite database under `~/Library/Application Support/VoxFlow/`.
+- Audio is captured by the OS, processed on-device by `whisper.cpp`, and written to your clipboard. Nothing leaves the machine.
+- Transcription history, personal dictionary, and settings live in a local SQLite database (`~/Library/Application Support/VoxFlow/voxflow.sqlite`). Delete that file to wipe everything.
+- The only outbound network request the app makes is a one-time download of the Whisper model file (~1.5 GB) from Hugging Face on first launch.
+- No telemetry. No analytics. No crash reports sent anywhere. The diagnostic log at `/tmp/voxflow-diag.log` stays on your machine.
 
-The only network call the app ever makes under default settings is a one-time download of the Whisper model file (~1.5 GB from Hugging Face's CDN) the first time you launch. After that: **no outbound network**.
+## Data flow inventory
 
-## Default: fully local
-
-| What | Where it happens | Network? |
+| Component | Where it runs | Network? |
 |---|---|---|
-| Microphone capture | Your Mac, via `node-mic` + `sox` | ❌ no |
-| Audio → text transcription | Your Mac, in-process via `whisper.cpp` (`smart-whisper` bindings) | ❌ no |
-| Hotkey detection | Your Mac, in-process via `uiohook-napi` (`CGEventTap`) | ❌ no |
-| Paste (`⌘V`) | Your Mac, in-process via `robotjs` (`CGEventPost`) | ❌ no |
-| Transcription history | `~/Library/Application Support/VoxFlow/voxflow.sqlite` | ❌ no |
-| Personal dictionary | Same SQLite database | ❌ no |
-| Repetition scrubbing (`collapseRepeats`) | Local JS | ❌ no |
+| Microphone capture | Your Mac, via `node-mic` + Homebrew `sox` | ❌ |
+| Speech-to-text | Your Mac, in-process via `whisper.cpp` (`smart-whisper` bindings) with Metal/Neural Engine acceleration | ❌ |
+| Hotkey detection | Your Mac, in-process `CGEventTap` (`uiohook-napi`) | ❌ |
+| Auto-paste (`⌘V`) | Your Mac, in-process `CGEventPost` (`robotjs`) | ❌ |
+| Transcription history | Local SQLite file | ❌ |
+| Personal dictionary | Local SQLite file | ❌ |
+| Settings | Local SQLite file | ❌ |
+| Repetition scrubbing | Local JS (`collapseRepeats`) | ❌ |
+| Diagnostic log | Local file at `/tmp/voxflow-diag.log` | ❌ |
 
-### The one-time model download
+## The one network call
 
-On first launch, VoxFlow downloads `ggml-large-v3-turbo.bin` (~1.5 GB) from `huggingface.co/ggerganov/whisper.cpp`. This is a one-way HTTP GET for a static file. No telemetry, no account required, no API key. The model file is then cached at `~/Library/Application Support/VoxFlow/models/` and reused forever.
+On first launch (and only on first launch), VoxFlow downloads `ggml-large-v3-turbo.bin` from `huggingface.co/ggerganov/whisper.cpp`. This is a single HTTPS GET for a static file — no account, no telemetry, no session. The model is cached at `~/Library/Application Support/VoxFlow/models/` and reused forever.
 
-After the download, VoxFlow makes **no network calls** when transcribing.
-
-## Opt-in: cloud providers
-
-Two features are deliberately *off* by default but can be enabled if you want them. When either is active, VoxFlow surfaces a visible indicator in the popover (an orange "Cloud" badge) so you always know when data is leaving your machine.
-
-### Groq Whisper API (opt-in cloud transcription)
-
-- **How to enable**: set `GROQ_API_KEY` and `VOXFLOW_TRANSCRIPTION_PROVIDER=groq` in `.env`.
-- **What leaves your machine**: the raw WAV audio of each dictation, uploaded to `api.groq.com`.
-- **Groq's stated retention**: [per their docs](https://console.groq.com/docs/your-data) they do not train on submitted audio and discard inputs/outputs when the request completes. They support Zero Data Retention on request for customers who want the reliability/abuse-monitoring caches disabled too.
-- **Why you might want this**: faster first-run experience (no 1.5 GB download), or if `whisper.cpp` can't run well on your hardware.
-
-## Verifying the "no network" claim yourself
-
-Run the app while watching outbound traffic:
+If you want to stop even that call from happening, you can pre-stage the file yourself:
 
 ```bash
-# macOS built-in — shows every network call VoxFlow makes
+mkdir -p ~/Library/Application\ Support/VoxFlow/models
+curl -L -o ~/Library/Application\ Support/VoxFlow/models/ggml-large-v3-turbo.bin \
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin
+```
+
+Then launch the app — it sees the file already exists and skips the download. From that point forward, the app never makes a network call.
+
+## Verifying "no network" yourself
+
+While VoxFlow is running and you're dictating:
+
+```bash
+# macOS built-in — every outbound socket used by VoxFlow
 sudo lsof -i -n -P -c VoxFlow
 ```
 
-or use [Little Snitch](https://www.obdev.at/products/littlesnitch/) / [Radio Silence](https://radiosilenceapp.com/) to block VoxFlow at the firewall level and confirm dictation still works.
+You should see zero outbound connections during dictation. Cached model = no HTTP at all.
+
+For a stricter test, block VoxFlow at the firewall and confirm dictation still works end-to-end:
+
+- [Little Snitch](https://www.obdev.at/products/littlesnitch/): block VoxFlow's outbound rules
+- [Radio Silence](https://radiosilenceapp.com/): add VoxFlow to the blocklist
+- Or disconnect from the internet entirely — dictation will work exactly the same
 
 ## What's in the SQLite database
 
 `~/Library/Application Support/VoxFlow/voxflow.sqlite` contains:
 
-- **`corrections`** table: every transcription you've ever done (original + corrected text + app name + timestamp).
-- **`dictionary`** table: your personal pattern→replacement rules.
-- **`settings`** table: hotkey override, language preference.
+- **`corrections`** — every transcription you've done, with the app name you were focused on and a timestamp.
+- **`dictionary`** — your personal pattern → replacement rules (e.g. `Kaden` → `Kayden`).
+- **`settings`** — hotkey override, language preference.
 
-Delete that file to wipe your VoxFlow history. The app will recreate an empty schema on next launch.
+Everything is plain text. Open it with any SQLite client (`sqlite3`, DB Browser for SQLite, etc.) and inspect. Delete the file to wipe all dictation history.
 
-## What's in `/tmp/voxflow-diag.log`
+## The diagnostic log
 
-A state trace of the pipeline (which states fired, when, any errors). Useful for debugging. Does **not** contain audio, transcribed text, or any personally-identifying data beyond the local process ID and timestamps. Safe to share when reporting bugs.
+`/tmp/voxflow-diag.log` records pipeline state transitions (recording → transcribing → idle), any errors, and basic timing. It does **not** contain audio, transcribed text, or any personally-identifying data beyond your local process ID and timestamps. Safe to share when reporting bugs.
 
 ## Reporting a privacy issue
 
-If you find any code path that sends data off the machine without a clearly-labeled cloud toggle, please open an issue with the specific code location. That's a bug, not a feature.
+If you find any code path that sends data off the machine, please open an issue with the specific code location. That's a bug, not a feature.

@@ -1,6 +1,5 @@
 import { app, BrowserWindow, globalShortcut, ipcMain, systemPreferences } from 'electron';
 import { menubar } from 'menubar';
-import dotenv from 'dotenv';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -45,17 +44,16 @@ process.on('unhandledRejection', (reason) => {
 import url from 'node:url';
 import { loadConfig } from '../shared/config.js';
 
-// Load .env from the project root in dev, or from the app resources dir when
-// packaged. Electron Forge doesn't auto-load .env files — without this, the
-// optional GROQ_API_KEY cloud fallback won't be wired up at startup.
-for (const candidate of [
-  path.resolve(process.cwd(), '.env'),
-  path.join(app.getAppPath(), '.env'),
-  path.join(path.dirname(app.getAppPath()), '.env'),
-]) {
-  if (fs.existsSync(candidate)) {
-    dotenv.config({ path: candidate });
-    break;
+// Load .env from the project root in dev mode only. No keys are required
+// (VoxFlow is fully local), but this lets developers override optional
+// env vars like VOXFLOW_HOTKEY or VOXFLOW_WHISPER_MODEL without touching
+// their shell profile.
+if (!app.isPackaged) {
+  const envPath = path.resolve(process.cwd(), '.env');
+  if (fs.existsSync(envPath)) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const dotenv = require('dotenv') as typeof import('dotenv');
+    dotenv.config({ path: envPath });
   }
 }
 import { createLogger, type Logger } from '../shared/logger.js';
@@ -63,7 +61,6 @@ import { createTray, defaultTrayIconPath, type TrayState } from './tray.js';
 import { PillWindow } from './pill.js';
 import { AudioRecorder } from '../services/audio/AudioRecorder.js';
 import { MacMicrophone } from '../platform/MacMicrophone.js';
-import { GroqTranscriptionService } from '../services/transcription/TranscriptionService.js';
 import {
   DictationPipeline,
   type PipelineEvent,
@@ -89,7 +86,7 @@ const logger = createLogger({ level: config.logLevel });
 try {
   fs.appendFileSync(
     DIAG_LOG,
-    `[${new Date().toISOString()}] config loaded; provider=${config.transcriptionProvider} model=${config.whisperModel} groqKey=${config.groqApiKey ? 'set' : 'unset'}\n`,
+    `[${new Date().toISOString()}] config loaded; model=${config.whisperModel}\n`,
   );
 } catch {
   // ignore
@@ -135,31 +132,20 @@ function createTranscriptionService(
   logger: Logger,
   modelManager: WhisperModelManager,
 ): ITranscriptionService {
-  if (config.transcriptionProvider === 'local') {
-    // Local whisper.cpp inference. If the model isn't downloaded yet, the
-    // pipeline falls back to a sentinel service so the user sees a clear
-    // "downloading…" state instead of recording silently.
-    if (!modelManager.isDownloaded(config.whisperModel)) {
-      logger.warn(`Whisper model ${config.whisperModel} not downloaded — transcription gated until ready`);
-      return {
-        async transcribe() {
-          return { text: NO_OP_TRANSCRIPTION_SENTINEL, durationMs: 0 };
-        },
-      };
-    }
-    return new LocalWhisperTranscriptionService({
-      modelPath: modelManager.pathFor(config.whisperModel),
-    });
+  // Local whisper.cpp inference is the only path. If the model isn't
+  // downloaded yet, the pipeline returns a sentinel so the UI can show a
+  // clear "downloading…" state instead of recording into the void.
+  if (!modelManager.isDownloaded(config.whisperModel)) {
+    logger.warn(`Whisper model ${config.whisperModel} not downloaded — transcription gated until ready`);
+    return {
+      async transcribe() {
+        return { text: NO_OP_TRANSCRIPTION_SENTINEL, durationMs: 0 };
+      },
+    };
   }
-  if (config.transcriptionProvider === 'groq' && config.groqApiKey) {
-    return new GroqTranscriptionService({ apiKey: config.groqApiKey });
-  }
-  logger.warn(`Transcription provider "${config.transcriptionProvider}" is not available — using a no-op service`);
-  return {
-    async transcribe() {
-      return { text: NO_OP_TRANSCRIPTION_SENTINEL, durationMs: 0 };
-    },
-  };
+  return new LocalWhisperTranscriptionService({
+    modelPath: modelManager.pathFor(config.whisperModel),
+  });
 }
 
 app.whenReady().then(async () => {
@@ -272,7 +258,7 @@ app.whenReady().then(async () => {
   // download in the background and swap the transcription service to the
   // real local engine once it's ready. We emit a custom state so the UI can
   // show progress without changing the pipeline's state machine.
-  if (config.transcriptionProvider === 'local' && !modelManager.isDownloaded(config.whisperModel)) {
+  if (!modelManager.isDownloaded(config.whisperModel)) {
     modelManager.on('progress', (p: { percent: number; bytesWritten: number; totalBytes: number }) => {
       try {
         fs.appendFileSync(
@@ -342,10 +328,7 @@ app.whenReady().then(async () => {
     return true;
   });
   ipcMain.handle('voxflow:privacy-info', async () => {
-    return {
-      provider: config.transcriptionProvider,
-      model: config.transcriptionProvider === 'local' ? config.whisperModel : undefined,
-    };
+    return { provider: 'local', model: config.whisperModel };
   });
   ipcMain.handle('voxflow:stop', async () => {
     // Pill's X button. Force-reset the pipeline so a stuck recording state

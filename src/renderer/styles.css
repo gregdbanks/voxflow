@@ -362,15 +362,7 @@ kbd {
   background: rgba(46, 160, 67, 0.12);
   color: #2ea043;
 }
-.privacy-badge.privacy-groq {
-  background: rgba(240, 136, 62, 0.15);
-  color: #d0660a;
-}
-.privacy-badge.privacy-none {
-  background: rgba(120, 120, 120, 0.12);
-  color: #666;
-}
-.privacy-icon { font-size: 13px; }
+.privacy-icon { width: 14px; height: 14px; flex-shrink: 0; }
 .privacy-label { font-weight: 500; }
 
 .model-download {

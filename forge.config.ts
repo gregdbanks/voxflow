@@ -70,13 +70,13 @@ const config: ForgeConfig = {
       unpack: '**/{*.node,better-sqlite3,node-mic,@paymoapp/active-window,smart-whisper}/**',
     },
     name: 'VoxFlow',
-    // NOTE: `.env` is shipped into Resources/ so the packaged main process
-    // can load secrets at startup (dotenv picks it up via
-    // path.dirname(app.getAppPath())). This bakes local keys into the .app —
-    // don't redistribute the built bundle.
+    // VoxFlow is fully local — no secrets to ship. The .env file used
+    // to be baked into Resources/ so dotenv could pick up GROQ_API_KEY /
+    // AWS_* in the packaged app; with Groq and Bedrock gone, we don't
+    // bake any credentials into builds. .env in dev is only for
+    // optional env overrides (VOXFLOW_HOTKEY, VOXFLOW_WHISPER_MODEL).
     extraResource: [
       './assets',
-      './.env',
       './native/build/paste-helper',
       './native/build/key-listener',
     ],
