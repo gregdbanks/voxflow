@@ -1,8 +1,4 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import type { IKeystroke } from './interfaces.js';
-
-const execFileAsync = promisify(execFile);
 
 export class AccessibilityPermissionError extends Error {
   constructor(message: string) {
@@ -12,28 +8,18 @@ export class AccessibilityPermissionError extends Error {
 }
 
 /**
- * macOS keystroke port. Uses `osascript` to synthesize a `Cmd+V` paste.
- * Requires Accessibility permission for the *launching* process — note that
- * in dev mode the launching process is the Electron binary inside
- * `node_modules/electron/dist/Electron.app`, NOT your Terminal.
+ * macOS keystroke port. We've been through osascript (-1743 Automation
+ * denials) and a CGEventPost helper binary (unsigned subprocess Accessibility
+ * is unreliable — toggles show "on" but AXIsProcessTrusted returns false).
+ * Without a real Apple Developer ID signature, auto-paste is not
+ * dependable, so this class now short-circuits: TextInjector writes the
+ * transcription to the clipboard, and the user pastes with ⌘V. That matches
+ * Wispr Flow's behaviour in manual-paste mode and is perfectly reliable.
  */
 export class MacKeystroke implements IKeystroke {
   async sendPaste(): Promise<void> {
-    try {
-      await execFileAsync('osascript', [
-        '-e',
-        'tell application "System Events" to keystroke "v" using command down',
-      ]);
-    } catch (err) {
-      const message = (err as { stderr?: string; message?: string }).stderr ?? (err as Error).message;
-      if (/is not allowed to send keystrokes|not allowed assistive access|1002/i.test(message)) {
-        throw new AccessibilityPermissionError(
-          'macOS denied the paste keystroke. Grant Accessibility permission to the app that ran this process ' +
-            '(System Settings → Privacy & Security → Accessibility). In dev mode that is Electron.app, not Terminal. ' +
-            'After granting, fully quit and re-launch the app.',
-        );
-      }
-      throw err;
-    }
+    throw new AccessibilityPermissionError(
+      'Auto-paste disabled — transcription is on the clipboard; press ⌘V to paste.',
+    );
   }
 }

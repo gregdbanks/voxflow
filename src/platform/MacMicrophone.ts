@@ -4,6 +4,8 @@ export interface MacMicrophoneOptions {
   sampleRate?: number;
   channels?: number;
   debug?: boolean;
+  /** Called with an RMS amplitude in [0,1] for each captured PCM chunk. */
+  onLevel?: (level: number) => void;
 }
 
 /**
@@ -13,7 +15,8 @@ export interface MacMicrophoneOptions {
  * Requires `brew install sox`.
  */
 export class MacMicrophone implements IMicrophone {
-  private readonly options: Required<MacMicrophoneOptions>;
+  private readonly options: Required<Omit<MacMicrophoneOptions, 'onLevel'>>;
+  private levelListener: ((level: number) => void) | undefined;
   private mic: { start(): void; stop(): void; getAudioStream(): NodeJS.ReadableStream } | null =
     null;
   private chunks: Buffer[] = [];
@@ -26,6 +29,11 @@ export class MacMicrophone implements IMicrophone {
       channels: options.channels ?? 1,
       debug: options.debug ?? false,
     };
+    this.levelListener = options.onLevel;
+  }
+
+  setLevelListener(listener: ((level: number) => void) | undefined): void {
+    this.levelListener = listener;
   }
 
   isRecording(): boolean {
@@ -51,7 +59,22 @@ export class MacMicrophone implements IMicrophone {
     });
     this.chunks = [];
     const stream = this.mic.getAudioStream();
-    this.onData = (chunk: Buffer) => this.chunks.push(Buffer.from(chunk));
+    this.onData = (chunk: Buffer) => {
+      this.chunks.push(Buffer.from(chunk));
+      if (this.levelListener) {
+        // Compute RMS over int16 little-endian samples. Normalised to [0,1]
+        // by dividing by 32768. The listener broadcasts this to the pill
+        // window for the waveform bars.
+        let sumSquares = 0;
+        const n = chunk.length / 2;
+        for (let i = 0; i + 1 < chunk.length; i += 2) {
+          const sample = chunk.readInt16LE(i);
+          sumSquares += sample * sample;
+        }
+        const rms = n > 0 ? Math.sqrt(sumSquares / n) / 32768 : 0;
+        this.levelListener(Math.min(1, rms));
+      }
+    };
     stream.on('data', this.onData);
     this.recording = true;
     this.mic.start();

@@ -5,6 +5,7 @@ import { setTranscriptionResponder, resetTranscriptionResponder } from '../../..
 import {
   GroqTranscriptionService,
   TranscriptionError,
+  collapseRepeats,
 } from '../../../../src/services/transcription/TranscriptionService.js';
 
 // The OpenAI SDK's telemetry inspects request URLs in a way that surfaces as
@@ -68,5 +69,29 @@ describe('GroqTranscriptionService', () => {
 
   it('rejects when no apiKey is provided', () => {
     expect(() => new GroqTranscriptionService({ apiKey: '' })).toThrow(/apiKey/);
+  });
+});
+
+describe('collapseRepeats', () => {
+  it('collapses 3+ consecutive identical words (space-separated)', () => {
+    expect(collapseRepeats('besides besides besides the point')).toBe('besides the point');
+  });
+
+  it('collapses comma-separated repetition', () => {
+    expect(collapseRepeats('word, word, word, word next')).toBe('word next');
+  });
+
+  it('leaves two-word repetition alone (likely intentional)', () => {
+    expect(collapseRepeats('yes yes I agree')).toBe('yes yes I agree');
+  });
+
+  it('does not cross different words', () => {
+    expect(collapseRepeats('a a a b b b')).toBe('a b');
+  });
+
+  it('preserves punctuation outside the collapsed run', () => {
+    expect(collapseRepeats('So, time time time passes. Then done.')).toBe(
+      'So, time passes. Then done.',
+    );
   });
 });

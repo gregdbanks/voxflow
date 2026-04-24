@@ -12,7 +12,7 @@ describe('SettingsRepository', () => {
   it('returns the seeded defaults', () => {
     const settings = fresh().get();
     expect(settings.cleanupEnabled).toBe(true);
-    expect(settings.hotkey).toBe('CommandOrControl+Shift+Space');
+    expect(settings.hotkey).toBe('Command+Alt+Z');
     expect(settings.language).toBe('auto');
   });
 
@@ -21,7 +21,7 @@ describe('SettingsRepository', () => {
     const after = repo.update({ cleanupEnabled: false, language: 'en' });
     expect(after.cleanupEnabled).toBe(false);
     expect(after.language).toBe('en');
-    expect(after.hotkey).toBe('CommandOrControl+Shift+Space');
+    expect(after.hotkey).toBe('Command+Alt+Z');
 
     const reloaded = repo.get();
     expect(reloaded).toEqual(after);

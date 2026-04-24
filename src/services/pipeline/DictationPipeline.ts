@@ -86,6 +86,23 @@ export class DictationPipeline {
     // transcribing / cleaning / injecting: ignore repeat presses
   }
 
+  /**
+   * Force the pipeline back to `idle` without transcribing. Used by the
+   * pill's stop-X button so the user can abort a stuck recording without
+   * waiting for Groq / Bedrock / the injector.
+   */
+  async cancel(): Promise<void> {
+    if (this.state === 'recording') {
+      try {
+        await this.recorder.stop();
+      } catch {
+        // swallow — we're force-resetting anyway
+      }
+    }
+    this.focusedApp = undefined;
+    this.setState('idle');
+  }
+
   async begin(): Promise<void> {
     if (this.state !== 'idle' && this.state !== 'error') {
       throw new Error(`Cannot begin pipeline in state ${this.state}`);
@@ -108,6 +125,23 @@ export class DictationPipeline {
     } catch (err) {
       this.setState('error', { error: err as Error });
       throw err;
+    }
+
+    // Diag: empty pcm means the mic port isn't delivering data (mic denied,
+    // or device not producing samples). Whisper hallucinates "Thank you." /
+    // "Thanks for watching." on silent audio, so this is a critical signal.
+    // Skipped under vitest so tests don't pollute the real diag file.
+    if (!process.env.VITEST) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const fs = require('node:fs');
+        fs.appendFileSync(
+          '/tmp/voxflow-diag.log',
+          `[${new Date().toISOString()}] recording pcmBytes=${recording.pcm.length} durationMs=${recording.durationMs}\n`,
+        );
+      } catch {
+        // ignore
+      }
     }
 
     this.setState('transcribing', { activeApp: this.focusedApp });

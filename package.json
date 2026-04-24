@@ -6,8 +6,12 @@
   "main": ".vite/build/main.js",
   "scripts": {
     "start": "electron-forge start",
-    "prestart": "npm run rebuild:native",
+    "prestart": "npm run rebuild:native && npm run build:helpers",
     "package": "electron-forge package",
+    "prepackage": "npm run rebuild:native && npm run build:helpers",
+    "build:paste-helper": "mkdir -p native/build && clang -O2 -framework ApplicationServices -o native/build/paste-helper native/paste-helper.c && codesign --sign - --identifier com.voxflow.paste-helper --force native/build/paste-helper",
+    "build:key-listener": "mkdir -p native/build && clang -O2 -framework ApplicationServices -framework CoreFoundation -o native/build/key-listener native/key-listener.c && codesign --sign - --identifier com.voxflow.key-listener --force native/build/key-listener",
+    "build:helpers": "npm run build:paste-helper && npm run build:key-listener",
     "make": "electron-forge make",
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
@@ -23,7 +27,7 @@
     "screenshots:m4": "tsx scripts/capture-m4-screenshots.ts",
     "screenshots:m5": "tsx scripts/capture-m5-screenshots.ts",
     "test:integration": "VOXFLOW_INTEGRATION=1 vitest run --config vitest.integration.config.ts",
-    "rebuild:native": "electron-rebuild -f -w better-sqlite3",
+    "rebuild:native": "electron-rebuild -f -w better-sqlite3,uiohook-napi",
     "rebuild:node": "npm rebuild better-sqlite3"
   },
   "dependencies": {
@@ -37,7 +41,8 @@
     "menubar": "^9.5.1",
     "msw": "^2.13.5",
     "node-mic": "^1.0.1",
-    "openai": "^6.34.0"
+    "openai": "^6.34.0",
+    "uiohook-napi": "^1.5.5"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.5.0",

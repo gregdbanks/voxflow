@@ -35,6 +35,16 @@ export function createTray(iconPath: string, onQuit: () => void): TrayController
     setState(state) {
       const suffix = state === 'idle' ? '' : ` · ${state}`;
       tray.setToolTip(`VoxFlow${suffix}`);
+      // Visible indicator — without this you'd have to hover the icon to know
+      // dictation is live. Red dot while recording, small dot during the
+      // post-recording pipeline, cleared at idle.
+      const title =
+        state === 'recording'
+          ? '●'
+          : state === 'transcribing' || state === 'cleaning' || state === 'injecting'
+            ? '·'
+            : '';
+      tray.setTitle(title);
     },
     destroy() {
       tray.destroy();
@@ -46,5 +56,10 @@ export function createTray(iconPath: string, onQuit: () => void): TrayController
 }
 
 export function defaultTrayIconPath(): string {
-  return path.join(app.getAppPath(), 'assets', 'tray-iconTemplate.png');
+  // In a packaged app, `app.getAppPath()` resolves inside app.asar, but
+  // forge.config.ts ships `assets/` via `extraResource`, which lands next to
+  // app.asar under process.resourcesPath. Joining against getAppPath() there
+  // points nowhere, which makes `new Tray(emptyImage)` an invisible tray.
+  const base = app.isPackaged ? process.resourcesPath : app.getAppPath();
+  return path.join(base, 'assets', 'tray-iconTemplate.png');
 }

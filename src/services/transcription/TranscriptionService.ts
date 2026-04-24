@@ -59,18 +59,28 @@ export class GroqTranscriptionService implements ITranscriptionService {
           model: this.model,
           language: request.language,
           response_format: 'json',
+          // temperature=0 makes Whisper deterministic — reduces the classic
+          // "besides besides besides" stutter on audio with hesitations.
+          temperature: 0,
         },
         { timeout: this.timeoutMs },
       );
       const text = typeof response === 'string' ? response : response.text;
       return {
-        text: text.trim(),
+        text: collapseRepeats(text.trim()),
         durationMs: Date.now() - startedAt,
       };
     } catch (err) {
       throw toTranscriptionError(err);
     }
   }
+}
+
+// Collapse 3+ immediate repetitions of the same token to a single occurrence.
+// Targets Whisper's "word word word" and "word, word, word" stutter without
+// clobbering intentional two-word repetitions like "yes yes".
+export function collapseRepeats(text: string): string {
+  return text.replace(/\b(\w+)(?:[\s,]+\1\b){2,}/gi, '$1');
 }
 
 function toTranscriptionError(err: unknown): TranscriptionError {

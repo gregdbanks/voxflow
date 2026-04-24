@@ -14,22 +14,14 @@ import path from 'node:path';
 // bundled. electron-forge + plugin-vite doesn't copy these into the packaged
 // app on its own (the asar ends up with just the .vite output + package.json),
 // so we ship them explicitly via a post-copy hook.
-// Modules that must exist in node_modules at runtime inside the packaged app.
-// The list is deliberately minimal: things with native .node files + their
-// transitive helpers, plus electron-squirrel-startup which is required
-// unconditionally at main.ts top level before vite can treeshake it.
-const NATIVE_EXTERNAL_DEPS = [
+// Seed list: direct deps we know main.js requires at runtime. Transitives are
+// walked automatically via each package.json — keeps this list minimal.
+const NATIVE_EXTERNAL_DEP_ROOTS = [
   'better-sqlite3',
   'node-mic',
-  'fflate', // node-mic transitive
-  'node-fetch', // node-mic transitive
-  'shelljs', // node-mic transitive
   '@paymoapp/active-window',
-  'bindings', // better-sqlite3 + active-window
-  'file-uri-to-path', // bindings transitive
   'electron-squirrel-startup',
-  'debug', // electron-squirrel-startup transitive
-  'ms', // debug transitive
+  'uiohook-napi',
 ];
 
 function copyDirRecursive(src: string, dest: string): void {
@@ -42,6 +34,25 @@ function copyDirRecursive(src: string, dest: string): void {
   }
 }
 
+// Walks each root dep's package.json and collects the full dependency closure.
+// Without this, any transitive (e.g. shelljs → glob → minimatch → …) silently
+// vanishes from the packaged app and crashes at first require.
+function collectTransitiveDeps(projectNodeModules: string, roots: string[]): string[] {
+  const resolved = new Set<string>();
+  const queue = [...roots];
+  while (queue.length > 0) {
+    const name = queue.shift()!;
+    if (resolved.has(name)) continue;
+    const pkgPath = path.join(projectNodeModules, name, 'package.json');
+    if (!fs.existsSync(pkgPath)) continue;
+    resolved.add(name);
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+    const deps = pkg.dependencies ? Object.keys(pkg.dependencies) : [];
+    for (const d of deps) if (!resolved.has(d)) queue.push(d);
+  }
+  return [...resolved];
+}
+
 const config: ForgeConfig = {
   packagerConfig: {
     asar: {
@@ -51,15 +62,50 @@ const config: ForgeConfig = {
       unpack: '**/{*.node,better-sqlite3,node-mic,@paymoapp/active-window}/**',
     },
     name: 'VoxFlow',
-    extraResource: ['./assets'],
+    // NOTE: `.env` is shipped into Resources/ so the packaged main process
+    // can load secrets at startup (dotenv picks it up via
+    // path.dirname(app.getAppPath())). This bakes local keys into the .app —
+    // don't redistribute the built bundle.
+    extraResource: [
+      './assets',
+      './.env',
+      './native/build/paste-helper',
+      './native/build/key-listener',
+    ],
+    // Without NSMicrophoneUsageDescription macOS silently denies mic access
+    // and Whisper hallucinates "Thank you." on the resulting silence.
+    // NSAppleEventsUsageDescription covers the legacy osascript fallback.
+    extendInfo: {
+      NSMicrophoneUsageDescription: 'VoxFlow needs microphone access to transcribe your dictation.',
+      NSAppleEventsUsageDescription: 'VoxFlow sends ⌘V to paste transcriptions into the focused app.',
+    },
   },
   hooks: {
+    // Ad-hoc codesign the packaged .app with a stable identifier so macOS TCC
+    // can remember Accessibility/Microphone grants across rebuilds. Without
+    // this, the default Electron code-signing identity is "com.github.Electron"
+    // and every fresh hash is treated as a brand-new unknown app — prompts
+    // stop firing, `askForMediaAccess` returns false immediately, and Whisper
+    // gets silent audio.
+    async postPackage(_forgeConfig, packageResult) {
+      for (const appPath of packageResult.outputPaths) {
+        const appBundle = path.join(appPath, 'VoxFlow.app');
+        if (!fs.existsSync(appBundle)) continue;
+        const { execSync } = await import('node:child_process');
+        execSync(
+          `codesign --sign - --identifier com.voxflow.app --force --deep "${appBundle}"`,
+          { stdio: 'inherit' },
+        );
+        console.log(`[forge] ad-hoc signed ${appBundle} as com.voxflow.app`);
+      }
+    },
     // Copy native modules that vite kept external into the packaged app,
     // because @electron-forge/plugin-vite doesn't do this on its own.
     async packageAfterCopy(_forgeConfig, buildPath) {
       const projectNodeModules = path.resolve(__dirname, 'node_modules');
       const targetNodeModules = path.join(buildPath, 'node_modules');
-      for (const dep of NATIVE_EXTERNAL_DEPS) {
+      const allDeps = collectTransitiveDeps(projectNodeModules, NATIVE_EXTERNAL_DEP_ROOTS);
+      for (const dep of allDeps) {
         const src = path.join(projectNodeModules, dep);
         if (!fs.existsSync(src)) {
           console.warn(`[forge] native dep not found, skipping: ${dep}`);
@@ -68,6 +114,7 @@ const config: ForgeConfig = {
         const dest = path.join(targetNodeModules, dep);
         copyDirRecursive(src, dest);
       }
+      console.log(`[forge] copied ${allDeps.length} external modules into packaged app`);
     },
   },
   rebuildConfig: {},

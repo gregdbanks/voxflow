@@ -16,12 +16,18 @@
         <h1>VoxFlow</h1>
         <nav class="tabs" role="tablist">
           <button type="button" class="tab" data-tab="dictate" aria-selected="true">Dictate</button>
+          <button type="button" class="tab" data-tab="history" aria-selected="false">History</button>
           <button type="button" class="tab" data-tab="settings" aria-selected="false">Settings</button>
         </nav>
       </header>
       <section class="panel-body" data-view="dictate">
-        <p id="status">Press <kbd>⌘⇧Space</kbd> to dictate</p>
+        <p id="status">Hold <kbd>⌥</kbd> to dictate (or <kbd>⌘⌥Z</kbd>)</p>
         <pre id="transcription" aria-live="polite"></pre>
+      </section>
+      <section class="panel-body" data-view="history" hidden>
+        <input type="search" id="history-search" class="history-search" placeholder="Search transcriptions…" autocomplete="off" />
+        <ul id="history-list" class="history-list"></ul>
+        <p id="history-empty" class="history-empty" hidden>No transcriptions yet.</p>
       </section>
       <section class="panel-body" data-view="settings" hidden>
         <div id="settings-dictionary"></div>

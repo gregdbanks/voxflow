@@ -1,8 +1,13 @@
-import { app, BrowserWindow, globalShortcut, ipcMain } from 'electron';
+import { app, BrowserWindow, globalShortcut, ipcMain, systemPreferences } from 'electron';
 import { menubar } from 'menubar';
 import dotenv from 'dotenv';
 import fs from 'node:fs';
 import path from 'node:path';
+
+// GUI-launched apps inherit a minimal PATH that omits Homebrew's bin dirs.
+// node-mic shells out to `sox`/`rec` via shelljs.which(), so without this
+// prepend, dictation dies at pipeline.begin() with "sox is not installed".
+process.env.PATH = `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH ?? ''}`;
 
 // Bypass-console diagnostics: when running the packaged .app, electron's
 // internal logging can swallow console.log unless ELECTRON_ENABLE_LOGGING is
@@ -46,7 +51,7 @@ for (const candidate of [
 }
 import { createLogger, type Logger } from '../shared/logger.js';
 import { createTray, defaultTrayIconPath, type TrayState } from './tray.js';
-import { createHotkey } from './hotkey.js';
+import { PillWindow } from './pill.js';
 import { AudioRecorder } from '../services/audio/AudioRecorder.js';
 import { MacMicrophone } from '../platform/MacMicrophone.js';
 import { GroqTranscriptionService } from '../services/transcription/TranscriptionService.js';
@@ -73,6 +78,14 @@ if (require('electron-squirrel-startup')) {
 
 const config = loadConfig();
 const logger = createLogger({ level: config.logLevel });
+try {
+  fs.appendFileSync(
+    DIAG_LOG,
+    `[${new Date().toISOString()}] config loaded; groqKey=${config.groqApiKey ? 'set' : 'MISSING'} awsKey=${config.awsAccessKeyId ? 'set' : 'unset'} awsRegion=${config.awsRegion}\n`,
+  );
+} catch {
+  // ignore
+}
 
 if (process.platform === 'darwin') {
   app.dock?.hide();
@@ -120,8 +133,47 @@ function createTranscriptionService(
   };
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   logger.info('VoxFlow starting');
+
+  // Microphone permission: without this the mic port silently delivers 0
+  // bytes and Whisper hallucinates training-set phrases ("Thank you.",
+  // "Thanks for watching.") on the resulting silence. Log the status and
+  // proactively trigger the system prompt if not yet decided.
+  //
+  // The `app.dock.show() + app.focus()` dance is important: for menubar apps
+  // without a visible window or dock icon, macOS buries the permission
+  // prompt behind other windows, and the user has to click the tray icon to
+  // surface it. Briefly showing the dock gives the process an on-screen
+  // identity, the prompt pops to the front, and we re-hide the dock as soon
+  // as the user responds.
+  try {
+    const micStatus = systemPreferences.getMediaAccessStatus('microphone');
+    fs.appendFileSync(DIAG_LOG, `[${new Date().toISOString()}] mic status=${micStatus}\n`);
+    if (micStatus !== 'granted') {
+      if (process.platform === 'darwin') {
+        try {
+          await app.dock?.show();
+        } catch {
+          // ignore — Electron versions without this method fall through
+        }
+      }
+      app.focus({ steal: true });
+      const granted = await systemPreferences.askForMediaAccess('microphone');
+      fs.appendFileSync(
+        DIAG_LOG,
+        `[${new Date().toISOString()}] mic askForMediaAccess=${granted}\n`,
+      );
+      if (process.platform === 'darwin') {
+        app.dock?.hide();
+      }
+    }
+  } catch (err) {
+    fs.appendFileSync(
+      DIAG_LOG,
+      `[${new Date().toISOString()}] mic status check failed: ${(err as Error).message}\n`,
+    );
+  }
 
   const iconPath = defaultTrayIconPath();
   const trayController = createTray(iconPath, () => {
@@ -159,10 +211,27 @@ app.whenReady().then(() => {
     corrections = new CorrectionRepository(database);
     settings = new SettingsRepository(database);
   } catch (err) {
+    const e = err as Error;
+    try {
+      fs.appendFileSync(
+        DIAG_LOG,
+        `[${new Date().toISOString()}] DB INIT FAILED: ${e.message}\n`,
+      );
+    } catch {
+      // ignore
+    }
     logger.error(
       'Failed to open SQLite — run `npm run rebuild:native` or `npx @electron/rebuild -f -w better-sqlite3`',
       err,
     );
+  }
+  try {
+    fs.appendFileSync(
+      DIAG_LOG,
+      `[${new Date().toISOString()}] DB init ok=${database !== undefined}\n`,
+    );
+  } catch {
+    // ignore
   }
 
   const microphone = new MacMicrophone();
@@ -173,6 +242,10 @@ app.whenReady().then(() => {
     keystroke: new MacKeystroke(),
   });
   const activeWindow = new MacActiveWindowDetector();
+
+  // Late-bound reference so IPC handlers registered before the pipeline
+  // is constructed can still reach it once it exists.
+  const pipelineRef: { current: DictationPipeline | null } = { current: null };
 
   if (dictionary) {
     ipcMain.handle('voxflow:dictionary:list', () => dictionary!.list());
@@ -190,10 +263,66 @@ app.whenReady().then(() => {
       return settings!.update(patch);
     });
   }
+  if (corrections) {
+    ipcMain.handle('voxflow:history:list', (_event, limit: number = 25) => {
+      return corrections!.recent(limit);
+    });
+  }
+  ipcMain.handle('voxflow:history:copy', async (_event, text: string) => {
+    new MacClipboard().write(text);
+    return true;
+  });
+  ipcMain.handle('voxflow:stop', async () => {
+    // Pill's X button. Force-reset the pipeline so a stuck recording state
+    // doesn't require a full quit/relaunch cycle.
+    try {
+      // pipeline is defined below; we capture it via the late-binding ref.
+      if (pipelineRef.current) await pipelineRef.current.cancel();
+    } catch (err) {
+      fs.appendFileSync(
+        DIAG_LOG,
+        `[${new Date().toISOString()}] pipeline.cancel failed: ${(err as Error).message}\n`,
+      );
+    }
+    return true;
+  });
+  ipcMain.handle('voxflow:history:reinject', async (_event, text: string) => {
+    // Hide the popover first so focus returns to the user's previous app
+    // before we paste. Paste will no-op in non-editable contexts.
+    mb.hideWindow();
+    await new Promise((r) => setTimeout(r, 150));
+    const inj = new TextInjector({ clipboard: new MacClipboard(), keystroke: new MacKeystroke() });
+    await inj.inject(text);
+    return true;
+  });
+
+  const pill = new PillWindow();
+  // Hook the mic's RMS level into the pill so the waveform bars dance in
+  // real time while recording. The listener fires whenever node-mic emits a
+  // PCM chunk (~20 Hz at 16 kHz / 800-sample chunks).
+  microphone.setLevelListener((level) => pill.level(level));
 
   const onPipelineEvent = (ev: PipelineEvent): void => {
+    try {
+      const textLen = ev.text !== undefined ? ev.text.length : -1;
+      const errMsg = ev.error ? ev.error.message : '';
+      fs.appendFileSync(
+        DIAG_LOG,
+        `[${new Date().toISOString()}] state=${ev.state} textLen=${textLen} manualPaste=${ev.manualPasteRequired ?? false} err=${errMsg}\n`,
+      );
+    } catch {
+      // ignore
+    }
     const trayState = STATE_TO_TRAY[ev.state];
     trayController.setState(trayState);
+    pill.update(ev.state);
+    // Clear the clipboard the moment the user releases the hotkey so a fast
+    // ⌘V during transcribe/clean doesn't paste the stale clipboard contents.
+    // TextInjector will refill it with the real transcription once the
+    // pipeline reaches the 'injecting' state.
+    if (ev.state === 'transcribing') {
+      void new MacClipboard().write('').catch(() => undefined);
+    }
     broadcast(mb, 'voxflow:state', ev.state);
     if (ev.text !== undefined) {
       broadcast(mb, 'voxflow:transcription', ev.text);
@@ -234,28 +363,121 @@ app.whenReady().then(() => {
     dictionary,
     onEvent: (ev) => {
       if (ev.state === 'idle' && ev.text && ev.text.length > 0 && corrections) {
-        corrections.record(ev.text, ev.text, ev.activeApp ?? null);
+        try {
+          corrections.record(ev.text, ev.text, ev.activeApp ?? null);
+        } catch (err) {
+          const e = err as Error;
+          try {
+            fs.appendFileSync(
+              DIAG_LOG,
+              `[${new Date().toISOString()}] corrections.record failed: ${e.message}\n`,
+            );
+          } catch {
+            // ignore
+          }
+        }
       }
       onPipelineEvent(ev);
     },
   });
-  void pipeline;
+  pipelineRef.current = pipeline;
 
-  const hotkey = createHotkey({
-    accelerator: config.hotkey,
-    onTrigger: () => {
-      pipeline.toggle().catch((err) => logger.error('Pipeline toggle failed', err));
-    },
-    shortcut: globalShortcut,
-  });
+  // Press-and-hold on the bare Option (⌥) key via uiohook-napi. Runs
+  // IN-PROCESS inside the main Electron binary which already has
+  // Accessibility — so we dodge the subprocess TCC mess the standalone
+  // key-listener hit. Option down starts recording, Option up ends it.
+  // If the user presses Option+letter for a special character, recording
+  // simply continues and the character types through as normal.
+  let uioStarted = false;
+  let optionHeld = false;
+  let beginInFlight: Promise<void> | null = null;
+  const installUiohook = async (): Promise<boolean> => {
+    try {
+      const { uIOhook, UiohookKey } = await import('uiohook-napi');
+      // Both Alt keycodes (left + right) — macOS surfaces each physical
+      // Option key with its own keycode.
+      const ALT_KEYCODES = new Set<number>([UiohookKey.Alt, UiohookKey.AltRight]);
 
-  mb.on('ready', () => {
+      uIOhook.on('keydown', (ev) => {
+        if (!ALT_KEYCODES.has(ev.keycode) || optionHeld) return;
+        optionHeld = true;
+        try {
+          fs.appendFileSync(DIAG_LOG, `[${new Date().toISOString()}] uio option down\n`);
+        } catch {
+          // ignore
+        }
+        beginInFlight = pipeline.begin().catch((err: Error) => {
+          fs.appendFileSync(
+            DIAG_LOG,
+            `[${new Date().toISOString()}] BEGIN FAILED: ${err.stack ?? err.message}\n`,
+          );
+        });
+      });
+
+      uIOhook.on('keyup', async (ev) => {
+        if (!ALT_KEYCODES.has(ev.keycode) || !optionHeld) return;
+        optionHeld = false;
+        try {
+          fs.appendFileSync(DIAG_LOG, `[${new Date().toISOString()}] uio option up\n`);
+        } catch {
+          // ignore
+        }
+        if (beginInFlight) {
+          await beginInFlight;
+          beginInFlight = null;
+        }
+        pipeline.finish().catch((err: Error) => {
+          fs.appendFileSync(
+            DIAG_LOG,
+            `[${new Date().toISOString()}] FINISH FAILED: ${err.stack ?? err.message}\n`,
+          );
+        });
+      });
+
+      uIOhook.start();
+      uioStarted = true;
+      return true;
+    } catch (err) {
+      fs.appendFileSync(
+        DIAG_LOG,
+        `[${new Date().toISOString()}] uiohook install failed: ${(err as Error).message}\n`,
+      );
+      return false;
+    }
+  };
+
+  // Fallback: if uiohook fails to load/start, keep the Cmd+Option+Z toggle
+  // working so the user isn't stranded without a hotkey.
+  const registerFallbackHotkey = (): boolean => {
+    return globalShortcut.register(config.hotkey, () => {
+      try {
+        fs.appendFileSync(DIAG_LOG, `[${new Date().toISOString()}] fallback hotkey toggle\n`);
+      } catch {
+        // ignore
+      }
+      pipeline.toggle().catch((err: Error) => {
+        fs.appendFileSync(
+          DIAG_LOG,
+          `[${new Date().toISOString()}] TOGGLE FAILED: ${err.stack ?? err.message}\n`,
+        );
+      });
+    });
+  };
+
+  mb.on('ready', async () => {
     logger.info('Menubar ready');
-    const ok = hotkey.register();
-    if (!ok) {
-      logger.warn(`Failed to register hotkey ${config.hotkey}`);
-    } else {
-      logger.info(`Hotkey registered: ${config.hotkey}`);
+    const uioOk = await installUiohook();
+    // Always register the Cmd+Option+Z toggle too — it's a harmless backup
+    // and gives the user a way to trigger dictation if uiohook is deafened
+    // for any reason (e.g. Accessibility reset).
+    const fbOk = registerFallbackHotkey();
+    try {
+      fs.appendFileSync(
+        DIAG_LOG,
+        `[${new Date().toISOString()}] menubar-ready; uiohook=${uioOk} fallback=${config.hotkey} registered=${fbOk}\n`,
+      );
+    } catch {
+      // ignore
     }
     onPipelineEvent({ state: 'idle' });
   });
@@ -269,7 +491,11 @@ app.whenReady().then(() => {
   });
 
   app.on('before-quit', () => {
-    hotkey.unregister();
+    if (uioStarted) {
+      void import('uiohook-napi').then((m) => m.uIOhook.stop()).catch(() => undefined);
+    }
+    globalShortcut.unregisterAll();
+    pill.destroy();
     trayController.destroy();
     database?.close();
   });
