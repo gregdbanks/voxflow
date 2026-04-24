@@ -22,7 +22,7 @@
     "screenshots:m3": "tsx scripts/capture-m3-screenshots.ts",
     "screenshots:m4": "tsx scripts/capture-m4-screenshots.ts",
     "screenshots:m5": "tsx scripts/capture-m5-screenshots.ts",
-    "test:integration": "VOXFLOW_INTEGRATION=1 vitest run test/integration",
+    "test:integration": "VOXFLOW_INTEGRATION=1 vitest run --config vitest.integration.config.ts",
     "rebuild:native": "electron-rebuild -f -w better-sqlite3",
     "rebuild:node": "npm rebuild better-sqlite3"
   },

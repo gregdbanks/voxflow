@@ -23,7 +23,7 @@ export interface BedrockCleanupOptions {
   client?: BedrockRuntimeClient;
 }
 
-const DEFAULT_MODEL = 'anthropic.claude-haiku-4-5-20251001-v1:0';
+const DEFAULT_MODEL = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
 const DEFAULT_MAX_TOKENS = 1024;
 const DEFAULT_TIMEOUT = 10_000;
 const DEFAULT_MAX_DIVERGENCE = 0.6;
