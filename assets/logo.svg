@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  VoxFlow logo — pixel-art microphone with speech waves. 32×32 grid rendered at 512×512.
+  Warm "study-buddy" palette: cream background, toasted-orange body, peach waves, espresso base.
+  Designed to read at 32×32 (favicon) through 512×512 (README hero) without anti-aliasing blur.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" shape-rendering="crispEdges" image-rendering="pixelated">
+  <!-- Rounded cream plate background -->
+  <rect width="512" height="512" rx="80" ry="80" fill="#FFF4E6"/>
+
+  <!-- Helper: each pixel is 16×16 in a 32×32 grid, offset by (0, 0) -->
+  <!-- Speech waves (left + right, peach) -->
+  <g fill="#F4A3B4">
+    <rect x="48"  y="128" width="16" height="16"/>
+    <rect x="48"  y="176" width="16" height="16"/>
+    <rect x="48"  y="224" width="16" height="16"/>
+    <rect x="32"  y="192" width="16" height="16"/>
+    <rect x="80"  y="160" width="16" height="16"/>
+    <rect x="80"  y="208" width="16" height="16"/>
+
+    <rect x="448" y="128" width="16" height="16"/>
+    <rect x="448" y="176" width="16" height="16"/>
+    <rect x="448" y="224" width="16" height="16"/>
+    <rect x="464" y="192" width="16" height="16"/>
+    <rect x="416" y="160" width="16" height="16"/>
+    <rect x="416" y="208" width="16" height="16"/>
+  </g>
+
+  <!-- Microphone body outline (espresso) -->
+  <g fill="#5B3A29">
+    <!-- top curve -->
+    <rect x="176" y="96"  width="160" height="16"/>
+    <rect x="160" y="112" width="16"  height="16"/>
+    <rect x="336" y="112" width="16"  height="16"/>
+    <!-- sides -->
+    <rect x="144" y="128" width="16" height="128"/>
+    <rect x="352" y="128" width="16" height="128"/>
+    <!-- bottom curve -->
+    <rect x="160" y="256" width="16"  height="16"/>
+    <rect x="336" y="256" width="16"  height="16"/>
+    <rect x="176" y="272" width="160" height="16"/>
+  </g>
+
+  <!-- Microphone body fill (warm orange) -->
+  <g fill="#E8833A">
+    <rect x="176" y="112" width="160" height="16"/>
+    <rect x="160" y="128" width="192" height="144"/>
+    <rect x="176" y="272" width="160" height="16"/>
+  </g>
+
+  <!-- Grille dots (espresso polka on the orange face) -->
+  <g fill="#5B3A29">
+    <rect x="192" y="144" width="16" height="16"/>
+    <rect x="240" y="144" width="16" height="16"/>
+    <rect x="288" y="144" width="16" height="16"/>
+
+    <rect x="208" y="176" width="16" height="16"/>
+    <rect x="256" y="176" width="16" height="16"/>
+    <rect x="304" y="176" width="16" height="16"/>
+
+    <rect x="192" y="208" width="16" height="16"/>
+    <rect x="240" y="208" width="16" height="16"/>
+    <rect x="288" y="208" width="16" height="16"/>
+
+    <rect x="208" y="240" width="16" height="16"/>
+    <rect x="256" y="240" width="16" height="16"/>
+    <rect x="304" y="240" width="16" height="16"/>
+  </g>
+
+  <!-- Cream highlight on upper-left of body (gives the mic dimension) -->
+  <g fill="#FFF4E6" opacity="0.35">
+    <rect x="176" y="112" width="16" height="16"/>
+    <rect x="160" y="128" width="16" height="112"/>
+  </g>
+
+  <!-- Neck connecting mic to stand (espresso) -->
+  <g fill="#5B3A29">
+    <rect x="224" y="288" width="64" height="16"/>
+    <rect x="240" y="304" width="32" height="32"/>
+  </g>
+
+  <!-- Stand pole -->
+  <rect x="248" y="336" width="16" height="80" fill="#5B3A29"/>
+
+  <!-- Base — wide espresso disc with a cream highlight -->
+  <g fill="#5B3A29">
+    <rect x="176" y="416" width="160" height="16"/>
+    <rect x="160" y="432" width="192" height="16"/>
+  </g>
+  <rect x="176" y="416" width="48" height="16" fill="#FFF4E6" opacity="0.35"/>
+</svg>
