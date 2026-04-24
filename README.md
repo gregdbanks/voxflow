@@ -14,41 +14,78 @@
 
 ## Highlights
 
-- 🔒 **Fully local by default.** OpenAI's Whisper runs on your Mac via `whisper.cpp`. Audio never leaves the machine.
-- 🆓 **Free forever.** No subscription, no API key required, no vendor lock-in.
-- ⚡ **Fast.** ~500 ms-2 s per dictation on an M4 Pro with Metal. Often faster than cloud.
-- 🎛️ **Press-and-hold on bare `⌥`** (Wispr-style), auto-pastes at your cursor, preserves your clipboard.
-- 📜 **Your own history + dictionary** in a local SQLite file you can inspect, export, or delete.
-- 👁️ **Clear data-flow indicator** in the popover: 🔒 Local or ☁️ Cloud — you always know where your audio is going.
+<table>
+<tr>
+<td width="40" align="center" valign="top">
+  <!-- lock -->
+  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#5B3A29" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+</td>
+<td><strong>Fully local.</strong> Every byte of audio you dictate is processed on-device by <code>whisper.cpp</code>. No cloud transcription, no API keys, no account. Runs offline after the one-time model download.</td>
+</tr>
+<tr>
+<td align="center" valign="top">
+  <!-- coin / no-cost -->
+  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#5B3A29" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12h8M12 8v8"/></svg>
+</td>
+<td><strong>Free forever.</strong> MIT licensed, no subscription, no vendor lock-in. Fork it, modify it, own it.</td>
+</tr>
+<tr>
+<td align="center" valign="top">
+  <!-- zap -->
+  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#5B3A29" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z"/></svg>
+</td>
+<td><strong>Fast.</strong> Metal + Apple Neural Engine acceleration. 500 ms–2 s end-to-end per dictation on an M4 Pro. No network round-trip.</td>
+</tr>
+<tr>
+<td align="center" valign="top">
+  <!-- keyboard -->
+  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#5B3A29" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>
+</td>
+<td><strong>Press-and-hold dictation.</strong> Hold <kbd>⌥</kbd>, speak, release — your words auto-paste at the cursor. Your pre-dictation clipboard is preserved automatically.</td>
+</tr>
+<tr>
+<td align="center" valign="top">
+  <!-- database -->
+  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#5B3A29" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 11v6c0 1.66 4 3 9 3s9-1.34 9-3v-6"/></svg>
+</td>
+<td><strong>Your own history + dictionary.</strong> Every transcription and correction rule lives in a local SQLite file you can inspect, export, back up, or delete.</td>
+</tr>
+<tr>
+<td align="center" valign="top">
+  <!-- wifi-off / air-gapped -->
+  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#5B3A29" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 2 20 20"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 4.17-2.65"/><path d="M10.66 5c4.01-.36 8.14.9 11.34 3.76"/><path d="M16.85 11.25a10 10 0 0 1 2.22 1.68"/><path d="M5 13a10 10 0 0 1 5.24-2.76"/><line x1="12" x2="12.01" y1="20" y2="20"/></svg>
+</td>
+<td><strong>Works offline.</strong> After the first-run model download (~1.5 GB from Hugging Face), no network connection is required. Unplug and keep dictating.</td>
+</tr>
+</table>
 
 ## Why VoxFlow instead of Wispr Flow?
 
 | | **VoxFlow** | **Wispr Flow** |
 |---|---|---|
 | **Price** | Free forever | $15 / month |
-| **Audio path** | **Never leaves your machine** (local whisper.cpp) | Their servers |
+| **Audio path** | **Never leaves your machine** | Their servers |
+| **Works offline** | Yes (after first-run model download) | No |
 | **Your clipboard** | Preserved (restored after paste) | Varies |
-| **Transcription history** | Local SQLite on your machine | In their cloud |
+| **Transcription history** | Local SQLite, fully yours | In their cloud |
 | **Source** | Open — fork it, hack it, own it | Closed |
 | **Hotkey** | Whatever you want (default: hold `⌥`) | Their choice |
 | **Dictionary / corrections** | Your own | Theirs |
 | **Lock-in** | None | Subscription |
-| **Network required** | No (offline after first-run model download) | Yes |
 
-VoxFlow runs OpenAI's Whisper model on your Mac via `whisper.cpp`. On an M4 Pro, a 2-5 second dictation transcribes in **150-600 ms** — often faster than cloud Whisper because there's no network round-trip. See [PRIVACY.md](./docs/PRIVACY.md) for the full data-flow inventory.
+VoxFlow runs OpenAI's Whisper model on your Mac via `whisper.cpp`. On an M4 Pro, a 2-5 second dictation transcribes in **500 ms–2 s**. See [PRIVACY.md](./docs/PRIVACY.md) for the full data-flow inventory.
 
 ## Features
 
-- **Fully local transcription** via `whisper.cpp` running OpenAI's Whisper model on-device. Nothing leaves your Mac. Offline-ready after first-run model download.
-- **Privacy indicator** in the popover: 🔒 Local (green) or ☁️ Cloud (orange). Always visible so you know where your audio is going.
-- **Press-and-hold dictation** on the bare `⌥` key (Wispr-style) via an in-process `CGEventTap`.
+- **Fully local transcription** via `whisper.cpp` running OpenAI's Whisper model on-device. Nothing leaves your Mac.
+- **Persistent privacy indicator** in the popover reminds you that audio is staying on-device.
+- **Press-and-hold dictation** on the bare `⌥` key via an in-process `CGEventTap`.
 - **Live audio waveform** in a floating pill at the bottom of the screen, only visible while you're talking.
-- **Auto-paste** at the cursor via an in-process `CGEventPost`, with your pre-dictation clipboard restored automatically after.
+- **Auto-paste** at the cursor via an in-process `CGEventPost`, with your pre-dictation clipboard restored after.
 - **Transcription history** in the menubar popover — the last 1000 entries, with live search, Copy, and Paste-again.
 - **Personal dictionary** for names and jargon. Add `Kaden` → `Kayden` once, it sticks forever.
-- **Repetition scrubber** for long dictations — Whisper's classic `"word word word"` hallucination is collapsed automatically.
-- **Optional cloud fallback**: Groq Whisper can be enabled as a fallback in `.env`; clearly labeled as cloud when active.
-- **SQLite-backed everything** — your dictations, corrections, settings, dictionary all live in `~/Library/Application Support/VoxFlow/voxflow.sqlite`.
+- **Repetition scrubber** — Whisper's classic `"word word word"` hallucination is collapsed automatically.
+- **SQLite-backed everything** — dictations, corrections, and settings live in `~/Library/Application Support/VoxFlow/voxflow.sqlite`.
 
 ## Quick start
 
@@ -119,12 +156,6 @@ open /Applications/VoxFlow.app
 Faster, skips the toolchain setup. Caveats:
 
 - The `.app` only works on the same CPU architecture it was built on (arm64 → arm64).
-- If you built it locally with a `.env` containing a Groq key, that key travels inside the bundle. **Strip it before copying:**
-
-  ```bash
-  rm /Applications/VoxFlow.app/Contents/Resources/.env
-  ```
-
 - macOS will show "unidentified developer" warnings because it's ad-hoc signed. Right-click → Open → Open once to allow.
 - The Whisper model lives in `~/Library/Application Support/VoxFlow/models/` on each machine. First launch on the new Mac re-downloads it (~1.5 GB).
 - Mic + Accessibility grants don't travel across machines. Grant them on each Mac.
@@ -153,10 +184,9 @@ src/
                      # plus macOS implementations.
   services/
     audio/           # AudioRecorder + WavEncoder
-    transcription/   # Groq Whisper + `collapseRepeats` scrubber
+    transcription/   # LocalWhisperTranscriptionService + WhisperModelManager
     injection/       # TextInjector (clipboard + paste + restore)
     storage/         # SQLite migrations, repos (Dictionary, Correction, Settings)
-    llm/             # TextCleanupService + PromptBuilder
     pipeline/        # DictationPipeline — state machine orchestrator
   shared/            # Pure: config loader + logger
 native/
@@ -193,11 +223,10 @@ Every state transition emits a `PipelineEvent`. The tray title, floating pill, a
 | Hotkey | `uiohook-napi` | In-process `CGEventTap`, detects bare `⌥` hold/release |
 | Paste | `robotjs` | In-process `CGEventPost`, avoids the unsigned-subprocess TCC hole |
 | Mic | `node-mic` (+ Homebrew `sox`) | Cheap, scriptable PCM capture |
-| Transcription (default) | `whisper.cpp` via `smart-whisper` | On-device Whisper, Metal-accelerated on Apple Silicon |
-| Transcription (fallback) | [Groq](https://groq.com) Whisper v3 via OpenAI SDK | Opt-in cloud path |
+| Transcription | `whisper.cpp` via `smart-whisper` | On-device Whisper, Metal + Neural-Engine accelerated on Apple Silicon |
 | Storage | `better-sqlite3` | Local, synchronous, zero-deps |
 | Window UI | Vanilla HTML + vite | No framework weight for a 400-px popover |
-| Tests | `vitest` + `msw` + Playwright | Unit / mocked-network / e2e |
+| Tests | `vitest` + Playwright | Unit / e2e |
 
 All production deps are MIT / Apache-2.0 / ISC. Run `npx license-checker --production --summary` to verify.
 
@@ -246,6 +275,6 @@ MIT — do whatever you want with it, don't sue me. See [LICENSE](./LICENSE).
 
 ## Credits
 
-- Transcription by [Groq](https://groq.com)'s Whisper endpoint.
-- Inspired by — and straightforwardly a free alternative to — [Wispr Flow](https://wisprflow.ai). Not affiliated with or endorsed by Wispr.
+- Speech-to-text by OpenAI's [Whisper](https://openai.com/research/whisper) (MIT licensed model weights) running on-device via [whisper.cpp](https://github.com/ggml-org/whisper.cpp).
+- Inspired by — and a free, local-first alternative to — [Wispr Flow](https://wisprflow.ai). Not affiliated with or endorsed by Wispr.
 - Logo: pixel art by me.

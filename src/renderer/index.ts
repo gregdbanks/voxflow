@@ -28,7 +28,7 @@ interface ModelProgress {
 }
 
 interface PrivacyInfo {
-  provider: 'local' | 'groq' | 'none';
+  provider: 'local';
   model?: string;
 }
 
@@ -195,30 +195,17 @@ window.voxflow?.onStateChange((state) => {
   if (state === 'idle') void renderHistory();
 });
 
-// Privacy badge — reflects whether audio is staying local or being sent to Groq.
+// Privacy badge — VoxFlow is fully local, so this badge is a persistent
+// confirmation that nothing is leaving the machine. No cloud state exists
+// because there's no cloud path in the app.
 const privacyBadgeEl = document.getElementById('privacy-badge');
 const privacyLabelEl = document.querySelector<HTMLElement>('.privacy-label');
-const privacyIconEl = document.querySelector<HTMLElement>('.privacy-icon');
 
 function paintPrivacy(info: PrivacyInfo): void {
-  if (!privacyBadgeEl || !privacyLabelEl || !privacyIconEl) return;
-  privacyBadgeEl.classList.remove('privacy-local', 'privacy-groq', 'privacy-none');
-  if (info.provider === 'local') {
-    privacyBadgeEl.classList.add('privacy-local');
-    privacyIconEl.textContent = '🔒';
-    privacyLabelEl.textContent = `Local · audio never leaves this machine${info.model ? ` (${info.model})` : ''}`;
-    privacyBadgeEl.title = 'Audio is transcribed on-device by whisper.cpp. No network calls.';
-  } else if (info.provider === 'groq') {
-    privacyBadgeEl.classList.add('privacy-groq');
-    privacyIconEl.textContent = '☁️';
-    privacyLabelEl.textContent = 'Cloud · audio sent to api.groq.com';
-    privacyBadgeEl.title = 'Audio is uploaded to Groq for transcription. Groq does not retain audio by default, but it does leave your machine.';
-  } else {
-    privacyBadgeEl.classList.add('privacy-none');
-    privacyIconEl.textContent = '⚠️';
-    privacyLabelEl.textContent = 'Dictation disabled';
-    privacyBadgeEl.title = 'No transcription provider is configured.';
-  }
+  if (!privacyBadgeEl || !privacyLabelEl) return;
+  privacyBadgeEl.classList.add('privacy-local');
+  privacyLabelEl.textContent = `Local · audio never leaves this machine${info.model ? ` (${info.model})` : ''}`;
+  privacyBadgeEl.title = 'Audio is transcribed on-device by whisper.cpp. No network calls.';
 }
 
 void window.voxflow?.getPrivacyInfo?.().then(paintPrivacy);
